@@ -1,0 +1,39 @@
+# Repo-wide ignores. The backend/ and client/ folders keep their own .gitignore
+# for app-specific ignores (Python venv/caches, node_modules, build output, etc.);
+# the rules here are a repo-root safety net so stray files at the top level (or in
+# any new top-level folder) never get committed by accident.
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets & environment — never commit a real .env anywhere; keep the template.
+.env
+.env.*
+!.env.example
+
+# Databases / local data (this is why an empty c.sqlite3 slipped in at the root).
+*.sqlite3
+*.sqlite
+*.db
+
+# Logs
+*.log
+logs/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+
+# Dependencies & build output (safety net for anything at the repo root)
+node_modules/
+dist/
+build/
+
+# Python caches (safety net for anything at the repo root)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/

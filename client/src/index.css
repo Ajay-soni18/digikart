@@ -1,0 +1,504 @@
+@import "tailwindcss";
+
+/* Dark mode uses the class strategy: the `.dark` class on <html> (set by the
+   FOUC script in index.html and toggled by useTheme) flips the theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Digikart — design system (Tailwind v4 @theme tokens).
+
+  Premium, balanced, medical-education palette:
+    • Brand PURPLE  → primary brand + primary actions
+    • NAVY / SLATE  → headings, body text, sidebar, premium dark sections, secondary actions
+    • TEAL / MINT   → success, progress, "fresh"/unlocked states
+    • GOLD / AMBER  → paid notes, pricing, premium badges, important CTAs
+    • CREAM canvas  → warm page background (not stark white)
+    • Warm SURFACE  → cards (off-white, not pure white)
+
+  Semantic colors keep contrast high and readable (WCAG-friendly).
+*/
+@theme {
+  /* ---- Brand purple (primary) ---- */
+  --color-brand-50: #fbf4fe;
+  --color-brand-100: #f5e6fc;
+  --color-brand-200: #ecc9f9;
+  --color-brand-300: #dea3f3;
+  --color-brand-400: #cc72ea;
+  --color-brand-500: #b948de;
+  --color-brand-600: #a229c3; /* primary */
+  --color-brand-700: #851e9f;
+  --color-brand-800: #6b1c7e;
+  --color-brand-900: #561967;
+  --color-brand-950: #3a0a48;
+
+  /* ---- Navy / slate (text, headings, sidebar, secondary) ---- */
+  --color-navy-50: #f4f6fb;
+  --color-navy-100: #e5e9f3;
+  --color-navy-200: #c8d0e2;
+  --color-navy-300: #9fadc7;
+  --color-navy-400: #6c7c9d;
+  --color-navy-500: #475674;
+  --color-navy-600: #344160;
+  --color-navy-700: #28324c; /* sidebar / premium dark */
+  --color-navy-800: #1c2438;
+  --color-navy-900: #131a2a;
+
+  /* ---- Teal / mint (success, progress, fresh) ---- */
+  --color-teal-50: #effaf6;
+  --color-teal-100: #d2f3e9;
+  --color-teal-200: #a6e7d4;
+  --color-teal-300: #6dd4bb;
+  --color-teal-400: #34bca0;
+  --color-teal-500: #14a187; /* success */
+  --color-teal-600: #0c826e;
+  --color-teal-700: #0d6759;
+  --color-teal-800: #0f5249;
+
+  /* ---- Gold / amber (premium, paid, pricing, key CTA) ---- */
+  --color-gold-50: #fcf7ea;
+  --color-gold-100: #f7ebc6;
+  --color-gold-200: #efd78c;
+  --color-gold-300: #e4bd52;
+  --color-gold-400: #d4a22f;
+  --color-gold-500: #b9851f; /* premium gold (white text passes AA) */
+  --color-gold-600: #976a18;
+  --color-gold-700: #785214;
+
+  /* ---- Surfaces & ink ---- */
+  --color-canvas: #f7f4ee;        /* warm cream page background */
+  --color-canvas-2: #efe9df;      /* deeper cream (wells / hovers) */
+  --color-surface: #fffdf9;       /* warm off-white card */
+  --color-lavender: #efe7f7;      /* soft lavender accent (hero wash, chips) */
+  --color-ink: #1b2236;           /* deep navy — headings & primary text */
+  --color-ink-soft: #586079;      /* slate — secondary text (AA on cream) */
+
+  /* ---- Borders ---- */
+  --color-line: #e7e1d6;          /* warm hairline */
+  --color-line-strong: #d6cdbd;
+
+  /* ---- Semantic aliases ---- */
+  --color-success: #0c826e;
+  --color-warning: #b9851f;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  /* ---- Typography ---- */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* ---- Radii & shadows (navy-tinted for a premium, neutral feel) ---- */
+  --radius-card: 1.25rem;
+  --shadow-soft: 0 10px 30px -14px rgba(27, 34, 54, 0.22);
+  --shadow-card: 0 4px 20px -10px rgba(27, 34, 54, 0.14);
+  --shadow-lift: 0 18px 40px -18px rgba(27, 34, 54, 0.30);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    color: var(--color-ink);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  /* Soft, premium hero wash: faint lavender + warm gold over cream. */
+  .bg-aurora {
+    background:
+      radial-gradient(55rem 38rem at 82% -8%, var(--color-lavender), transparent 60%),
+      radial-gradient(46rem 34rem at -8% 4%, #f6edd6, transparent 55%),
+      var(--color-canvas);
+  }
+
+  /* Gentle fade + slide-down used by the dashboard announcement cards on load.
+     Cards stagger via an inline animation-delay. Honours reduced-motion. */
+  @keyframes announce-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-announce-in {
+    animation: announce-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Gentle vertical bob for the dashboard banner's icon badge — a calm
+     "floating" cue, not a bounce. */
+  @keyframes float-soft {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+  .animate-float-soft {
+    animation: float-soft 3.2s ease-in-out infinite;
+  }
+
+  /* Premium glowing border for the dashboard's latest-announcement banner: a
+     soft brand-purple ring + halo that breathes. Same lavender as the rest of
+     the UI; reads on both light and dark surfaces. The resting (0%) state is set
+     statically too, so reduced-motion keeps a tasteful glow instead of nothing.
+     Rendered as box-shadow on the card itself — not clipped by overflow-hidden,
+     so it stays a clean ring around the rounded card at every width. */
+  @keyframes banner-glow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 1px rgba(162, 41, 195, 0.12),
+        0 8px 24px -12px rgba(162, 41, 195, 0.30);
+    }
+    50% {
+      box-shadow:
+        0 0 0 1px rgba(162, 41, 195, 0.32),
+        0 10px 30px -10px rgba(162, 41, 195, 0.48);
+    }
+  }
+  .animate-banner-glow {
+    box-shadow:
+      0 0 0 1px rgba(162, 41, 195, 0.12),
+      0 8px 24px -12px rgba(162, 41, 195, 0.30);
+    animation: banner-glow 3.8s ease-in-out infinite;
+  }
+
+  /* Circular marquee for a truncated announcement message: when the body text
+     can't fit the available width, it scrolls horizontally in a seamless loop
+     instead of being cut off with an ellipsis. Two identical copies sit side by
+     side and the track slides left by exactly one copy (+ its gap), so the wrap
+     is seamless ("circular"). The <Marquee> component mounts this ONLY when the
+     text actually overflows, and never under reduced motion (it shows a clean
+     ellipsis there instead). Speed is constant: the component sets
+     --marquee-duration from the measured width. Pauses on hover so it's readable. */
+  @keyframes marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  .marquee-track {
+    animation: marquee-scroll var(--marquee-duration, 12s) linear infinite;
+    will-change: transform;
+  }
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+  .marquee-item {
+    flex-shrink: 0;
+    padding-right: 3rem; /* gap between loops; must match MARQUEE_GAP in JS */
+  }
+
+  /* =========================================================================
+     COUPON PROMO OVERLAY (components/CouponPromoOverlay.jsx)
+     A staged entrance for the welcome-coupon overlay. Each piece is a plain
+     keyframe utility; the component orders them with inline animation-delay so
+     the beats read as one sequence: backdrop → card spring → gift pop +
+     confetti burst → copy rises → ticket pops → code types itself in → foil
+     sheen. Under reduced-motion every one of these is disabled at the bottom of
+     this block (elements then render at their resting state) and the confetti is
+     removed outright.
+     ========================================================================= */
+
+  /* Backdrop dim/blur fade. */
+  @keyframes promo-backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .animate-promo-backdrop {
+    animation: promo-backdrop-in 0.4s ease-out both;
+  }
+
+  /* The card itself: rises and overshoots slightly, then settles — a spring,
+     not a bounce. */
+  @keyframes promo-card-in {
+    0% {
+      opacity: 0;
+      transform: translateY(30px) scale(0.9);
+    }
+    65% {
+      opacity: 1;
+      transform: translateY(0) scale(1.025);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .animate-promo-card {
+    animation: promo-card-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Scale pop with a soft overshoot — gift badge and coupon ticket. */
+  @keyframes promo-pop-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.62);
+    }
+    70% {
+      opacity: 1;
+      transform: scale(1.06);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-promo-pop {
+    animation: promo-pop-in 0.58s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Plain fade + rise — eyebrow, headline, body copy, ✕ and CTA. */
+  @keyframes promo-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-promo-rise {
+    animation: promo-rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Per-character reveal for the coupon code: each letter drops in out of
+     focus and snaps sharp, staggered by the component. */
+  @keyframes promo-char-in {
+    0% {
+      opacity: 0;
+      transform: translateY(-9px) scale(1.45);
+      filter: blur(6px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+  .animate-promo-char {
+    animation: promo-char-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Confetti burst. The component supplies --dx/--dy (travel), --rot (tumble),
+     --dur and --delay per particle; particles fan out from the gift badge and
+     fade as they go. Clipped by the card, so nothing escapes the rounded box. */
+  @keyframes promo-confetti {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.4) rotate(0deg);
+    }
+    12% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--dx, 0), var(--dy, 0)) scale(1) rotate(var(--rot, 180deg));
+    }
+  }
+  .promo-confetti {
+    animation: promo-confetti var(--dur, 1.4s) cubic-bezier(0.16, 0.84, 0.44, 1)
+      var(--delay, 0s) both;
+  }
+
+  /* Foil sheen sweeping across the coupon ticket, on a loop — the "premium"
+     glint that keeps drawing the eye back to the code. */
+  @keyframes promo-sheen {
+    0% {
+      transform: translateX(-60%) skewX(-16deg);
+    }
+    100% {
+      transform: translateX(460%) skewX(-16deg);
+    }
+  }
+  .animate-promo-sheen {
+    animation: promo-sheen 2.8s ease-in-out 1.1s infinite;
+  }
+
+  /* Rotating conic halo behind the gift badge. Its centre is covered by the
+     badge, so only a thin band of travelling light shows. */
+  @keyframes promo-ring-spin {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+  .promo-ring {
+    background: conic-gradient(
+      from 0deg,
+      transparent 0 52%,
+      var(--color-gold-300) 70%,
+      var(--color-brand-400) 86%,
+      transparent 100%
+    );
+    animation: promo-ring-spin 3.4s linear infinite;
+  }
+
+  /* Breathing glow under the gift badge. */
+  @keyframes promo-halo {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.2);
+    }
+  }
+  .animate-promo-halo {
+    animation: promo-halo 2.8s ease-in-out infinite;
+  }
+
+  /* Slow drift for the blurred lavender/gold orbs in the overlay's background. */
+  @keyframes promo-orb {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    50% {
+      transform: translate(12px, -16px);
+    }
+  }
+  .animate-promo-orb {
+    animation: promo-orb 7s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-announce-in,
+    .animate-float-soft,
+    .animate-banner-glow,
+    .marquee-track,
+    .animate-promo-backdrop,
+    .animate-promo-card,
+    .animate-promo-pop,
+    .animate-promo-rise,
+    .animate-promo-char,
+    .animate-promo-sheen,
+    .promo-ring,
+    .animate-promo-halo,
+    .animate-promo-orb {
+      animation: none;
+    }
+    /* A burst of flying particles has no calm equivalent — drop it entirely. */
+    .promo-confetti {
+      display: none;
+    }
+  }
+}
+
+/* ===========================================================================
+   DARK MODE
+   Only the SEMANTIC surface/text/line tokens and the light accent TINTS flip.
+   The brand/navy/teal/gold accent ramps (500–900) stay intact, preserving the
+   logo-based identity — they read as accents on the dark navy surfaces, and
+   accent-as-text uses `dark:` light variants applied in the components.
+   Premium dark navy/slate — never pure black.
+   =========================================================================== */
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Surfaces — deep navy/slate, with cards/wells slightly lifted (lighter). */
+  --color-canvas: #0e1626;    /* page background */
+  --color-canvas-2: #18223a;  /* wells / hover (lifted) */
+  --color-surface: #161f37;   /* cards (lifted above canvas) */
+  --color-lavender: #221c39;  /* soft accent wash / chips */
+
+  /* Text — readable, not stark white. */
+  --color-ink: #eef1f8;       /* headings & primary text */
+  --color-ink-soft: #a1abc4;  /* secondary text (AA on canvas) */
+
+  /* Borders / hairlines. */
+  --color-line: #283250;
+  --color-line-strong: #3a466a;
+
+  /* Light accent TINTS (used as chip/well/badge backgrounds + rings/borders;
+     never used as text) → muted dark fills. Accent text on them uses the
+     light `dark:text-*-300/400` variants. */
+  --color-brand-50: #1b1530;
+  --color-brand-100: #241b3d;
+  --color-brand-200: #2f2350;
+  --color-gold-50: #241c10;
+  --color-gold-100: #2d2416;
+  --color-gold-200: #3a2f1c;
+  --color-teal-50: #0c2520;
+  --color-teal-100: #0f2e28;
+  --color-teal-200: #133a32;
+  --color-red-50: #2b1517;
+  --color-red-100: #371a1d;
+
+  /* Deeper, darker shadows read better on a dark canvas. */
+  --shadow-soft: 0 10px 30px -14px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 4px 20px -10px rgba(0, 0, 0, 0.5);
+  --shadow-lift: 0 18px 40px -18px rgba(0, 0, 0, 0.62);
+}
+
+@layer utilities {
+  /* Dark variant of the hero/dashboard aurora wash. */
+  .dark .bg-aurora {
+    background:
+      radial-gradient(55rem 38rem at 82% -8%, rgba(124, 77, 169, 0.22), transparent 60%),
+      radial-gradient(46rem 34rem at -8% 4%, rgba(150, 106, 24, 0.14), transparent 55%),
+      var(--color-canvas);
+  }
+}
+
+/* Razorpay checkout in dark mode.
+   Razorpay reads the page's dark color-scheme and paints an opaque dark dim
+   layer over the whole page, which hides our themed page behind the modal (in
+   light mode that layer is transparent, so the page shows through). We neutralise
+   the dim layer so the real, dark-themed page stays visible behind the centred
+   modal — matching light-mode behaviour.
+
+   The checkout form is a same-origin <iframe> (.razorpay-checkout-frame) inside
+   .razorpay-container; this only clears the surrounding dim DIV(s)/backdrop, so
+   the modal itself is never affected. Scoped to dark mode only, so light mode is
+   untouched. */
+html.dark .razorpay-container,
+html.dark .razorpay-container > div,
+html.dark .razorpay-container::before {
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+}
+/* Razorpay's checkout <iframe> inherits the page's `color-scheme: dark` and then
+   renders its OWN dark backdrop inside the frame (which page CSS can't repaint).
+   Pin the frame back to light so Razorpay uses the same transparent-backdrop
+   variant as light mode — the form is already light either way, so only the dim
+   region changes, letting our dark page show through. */
+html.dark .razorpay-container,
+html.dark iframe.razorpay-checkout-frame {
+  color-scheme: light !important;
+}
+
+/* Hide protected note content from print output. */
+@media print {
+  .protect-hide-on-print {
+    display: none !important;
+  }
+}

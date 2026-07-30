@@ -1,0 +1,18 @@
+# Process definitions for PaaS hosts (Render / Railway / Heroku-style).
+# `release` runs once per deploy; `web` is the long-running server.
+#
+# Note PDFs are NOT proxied through Django anymore: a request only checks access
+# and signs a short-lived URL, and the browser fetches the bytes directly from
+# object storage (HTTP Range). So a worker never holds a large file in RAM, and
+# requests are light + I/O-bound — `--threads` lets one worker serve many
+# concurrent API/sign calls. `--max-requests` recycles workers periodically as
+# general memory hygiene.
+release: python manage.py migrate --no-input --settings=config.settings.prod
+# Tuned for a 512 MB free dyno. Because byte-streaming no longer lives in the
+# worker, you can safely raise `--workers` (≈ CPU cores) once on a larger plan;
+# memory is no longer the per-worker constraint it was under the old proxy model.
+# --timeout 300: an admin NOTE UPLOAD does real work in-request (receive the
+# PDF, validate + build the compressed rendition, upload BOTH files to R2) — on
+# a small shared-CPU dyno a 40 MB scan can exceed 120 s. Student-facing requests
+# stay tiny (sign-a-URL JSON); the longer timeout only gives uploads room.
+web: gunicorn config.wsgi:application --workers 1 --threads 4 --timeout 300 --max-requests 200 --max-requests-jitter 40 --bind 0.0.0.0:$PORT

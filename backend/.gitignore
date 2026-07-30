@@ -1,0 +1,40 @@
+# Python / Django
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+# Holds a hardcoded Gmail app password in its CONFIG block.
+apps/accounts/management/commands/send_mailing.py
+
+# Collected static & uploaded media
+staticfiles/
+media/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Alternative virtualenv directory names
+venv/
+env/

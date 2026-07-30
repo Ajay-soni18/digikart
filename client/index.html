@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/digikart-logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Apply the saved theme (or system preference) before paint to avoid a
+         flash of the wrong theme. Mirrors useTheme()'s resolution logic. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme"); // "light" | "dark" | null
+          var dark =
+            saved === "dark" ||
+            (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (e) {}
+      })();
+    </script>
+
+    <!-- SEO (per-page titles are set at runtime; the description is fixed here) -->
+    <title>Digikart — the digital product mart</title>
+    <meta
+      name="description"
+      content="Digikart — a digital product mart. List and sell files, notes, videos, links and bundles, with instant delivery after payment."
+    />
+    <meta name="theme-color" content="#a229c3" />
+    <meta property="og:title" content="Digikart" />
+    <meta
+      property="og:description"
+      content="Digikart — a digital product mart. List and sell files, notes, videos, links and bundles, with instant delivery after payment."
+    />
+    <meta property="og:type" content="website" />
+
+    <!-- Brand font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Razorpay checkout (used at payment time) -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
