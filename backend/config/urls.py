@@ -36,12 +36,12 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # Versioned API. Each app contributes its routes:
     path("api/v1/auth/", include("apps.accounts.urls")),
-    path("api/v1/", include("apps.content.urls")),
+    path("api/v1/", include("apps.catalog.urls")),
     path("api/v1/", include("apps.siteconfig.urls")),
     path("api/v1/", include("apps.engagement.urls")),
     path("api/v1/payments/", include("apps.payments.urls")),
     # Admin-only CRUD (custom React admin dashboard talks to these)
-    path("api/v1/admin/", include("apps.content.admin_urls")),
+    path("api/v1/admin/", include("apps.catalog.admin_urls")),
     path("api/v1/admin/", include("apps.accounts.admin_urls")),
     path("api/v1/admin/", include("apps.engagement.admin_urls")),
     path("api/v1/admin/", include("apps.payments.admin_urls")),

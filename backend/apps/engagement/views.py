@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.content.models import Lecture, Note
+from apps.catalog.models import Product
 
 from .models import Announcement, Bookmark, ContactMessage, Progress
 from .serializers import (
@@ -19,17 +19,15 @@ from .serializers import (
     ProgressMarkSerializer,
 )
 
-# Bookmarkable types
-BOOKMARK_MODELS = {"lecture": Lecture, "note": Note}
+# Bookmarkable types. The flat catalog has one addressable thing, so this is a
+# single entry — kept as a map because the toggle endpoint still takes a `type`
+# and rejecting anything else is the point.
+BOOKMARK_MODELS = {"product": Product}
 
 
 def _bookmark_kind(obj):
     """Map a bookmarked object back to its frontend `kind`."""
-    if isinstance(obj, Lecture):
-        return "lecture"
-    if isinstance(obj, Note):
-        return "note"
-    return "unknown"
+    return "product" if isinstance(obj, Product) else "unknown"
 
 
 # --- Public ---------------------------------------------------------------
@@ -76,13 +74,14 @@ class BookmarkToggleView(APIView):
         if not model or not obj_id:
             return Response({"detail": "Invalid bookmark target."}, status=400)
         # Only published content is addressable by id — never let a client probe
-        # for (or bookmark) unpublished/draft notes & lectures.
+        # for (or bookmark) unpublished/draft products.
         obj = get_object_or_404(model, pk=obj_id, is_published=True)
         ct = ContentType.objects.get_for_model(model)
-        # Notes are bookmarked per page; other kinds bookmark the whole object.
+        # Paginated products (a PDF) bookmark a page; everything else bookmarks
+        # the whole product.
         raw_page = request.data.get("page")
         try:
-            page = int(raw_page) if (kind == "note" and raw_page) else None
+            page = int(raw_page) if raw_page else None
         except (TypeError, ValueError):
             page = None
         existing = Bookmark.objects.filter(
@@ -101,29 +100,29 @@ class ProgressView(APIView):
 
     def get(self, request):
         completed = list(
-            request.user.progress.filter(completed=True).values_list("lecture_id", flat=True)
+            request.user.progress.filter(completed=True).values_list("product_id", flat=True)
         )
-        return Response({"completed_lecture_ids": completed})
+        return Response({"completed_product_ids": completed})
 
 
 class ProgressMarkView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, lecture_id):
-        # Published lectures only — an unpublished/draft id is not addressable.
-        lecture = get_object_or_404(Lecture, pk=lecture_id, is_published=True)
+    def post(self, request, product_id):
+        # Published products only — an unpublished/draft id is not addressable.
+        product = get_object_or_404(Product, pk=product_id, is_published=True)
         s = ProgressMarkSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         completed = s.validated_data["completed"]
         if completed:
             Progress.objects.update_or_create(
-                user=request.user, lecture=lecture, defaults={"completed": True},
+                user=request.user, product=product, defaults={"completed": True},
             )
         else:
             # Incomplete == no progress: drop the row rather than keep a dead
             # completed=False record (nothing reads it).
-            Progress.objects.filter(user=request.user, lecture=lecture).delete()
-        return Response({"lecture_id": lecture.id, "completed": completed})
+            Progress.objects.filter(user=request.user, product=product).delete()
+        return Response({"product_id": product.id, "completed": completed})
 
 
 # --- Admin ----------------------------------------------------------------

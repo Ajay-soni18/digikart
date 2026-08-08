@@ -24,7 +24,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.content.models import Chapter, Note, Subject, Unit
+from apps.catalog.models import Bundle, Category, Product
 
 from .models import Coupon, Order, OrderItem
 from .serializers import AdminCouponSerializer, AdminTransactionSerializer
@@ -109,72 +109,66 @@ def _net_line_prices(items, order_totals):
 
 
 def _breakdowns(paid_orders):
-    """Roll paid OrderItem revenue up to the owning subject / unit / chapter.
+    """Roll paid OrderItem revenue up the category tree, plus a per-product list.
 
-    A note purchase counts toward its chapter, unit and subject; a chapter
-    purchase toward its chapter, unit and subject; a unit purchase toward its unit
-    and subject; a subject purchase toward the subject. Line revenue is net of any
-    coupon (see `_net_line_prices`) so the breakdowns reconcile with the headline
-    total. Items whose content was since deleted are skipped (the authoritative
-    total still comes from order amounts).
+    A product sale counts toward its own category and every category above it, so
+    a parent's figure is the true total of everything beneath it. A bundle sale
+    counts toward the bundle's category chain — bundles are sold as a unit, and
+    splitting one across its members would invent a breakdown the buyer never
+    made. Line revenue is net of any coupon (see `_net_line_prices`) so the
+    breakdowns reconcile with the headline total. Items whose product or bundle
+    was since deleted are skipped; the authoritative total still comes from order
+    amounts.
     """
     items = list(
         OrderItem.objects.filter(order__in=paid_orders).select_related("content_type")
     )
     net_price = _net_line_prices(items, dict(paid_orders.values_list("id", "amount")))
-    ct_no = ContentType.objects.get_for_model(Note)
-    ct_ch = ContentType.objects.get_for_model(Chapter)
-    ct_un = ContentType.objects.get_for_model(Unit)
-    ct_su = ContentType.objects.get_for_model(Subject)
+    ct_pr = ContentType.objects.get_for_model(Product)
+    ct_bu = ContentType.objects.get_for_model(Bundle)
 
-    no_ids = {i.object_id for i in items if i.content_type_id == ct_no.id}
-    ch_ids = {i.object_id for i in items if i.content_type_id == ct_ch.id}
-    un_ids = {i.object_id for i in items if i.content_type_id == ct_un.id}
-    su_ids = {i.object_id for i in items if i.content_type_id == ct_su.id}
+    pr_ids = {i.object_id for i in items if i.content_type_id == ct_pr.id}
+    bu_ids = {i.object_id for i in items if i.content_type_id == ct_bu.id}
+    products = {
+        p.id: p for p in Product.objects.filter(id__in=pr_ids).select_related("category")
+    }
+    bundles = {
+        b.id: b for b in Bundle.objects.filter(id__in=bu_ids).select_related("category")
+    }
 
-    notes = {n.id: n for n in Note.objects.filter(id__in=no_ids).select_related("chapter__unit__subject")}
-    chapters = {c.id: c for c in Chapter.objects.filter(id__in=ch_ids).select_related("unit__subject")}
-    units = {u.id: u for u in Unit.objects.filter(id__in=un_ids).select_related("subject")}
-    subjects = {s.id: s for s in Subject.objects.filter(id__in=su_ids)}
+    cat_rev, cat_name = defaultdict(Decimal), {}
+    prod_rev, prod_name = defaultdict(Decimal), {}
 
-    subj_rev, unit_rev, chap_rev = defaultdict(Decimal), defaultdict(Decimal), defaultdict(Decimal)
-    subj_name, unit_name, chap_name = {}, {}, {}
-
-    def _roll_up_chapter(c, price):
-        """Attribute `price` to a chapter and its parent unit + subject."""
-        chap_rev[c.id] += price; chap_name[c.id] = f"{c.unit.subject.name} · {c.name}"
-        unit_rev[c.unit_id] += price; unit_name[c.unit_id] = f"{c.unit.subject.name} · {c.unit.name}"
-        subj_rev[c.unit.subject_id] += price; subj_name[c.unit.subject_id] = c.unit.subject.name
+    def _roll_up(category, price):
+        """Attribute `price` to a category and every ancestor above it."""
+        if category is None:
+            return
+        for node in [*category.ancestors, category]:
+            cat_rev[node.id] += price
+            cat_name[node.id] = node.path
 
     for it in items:
         price = net_price.get(it.id, it.price or Decimal("0.00"))
-        if it.content_type_id == ct_no.id:
-            n = notes.get(it.object_id)
-            if not n:
+        if it.content_type_id == ct_pr.id:
+            product = products.get(it.object_id)
+            if not product:
                 continue
-            _roll_up_chapter(n.chapter, price)  # a note sale shows under its chapter
-        elif it.content_type_id == ct_ch.id:
-            c = chapters.get(it.object_id)
-            if not c:
+            prod_rev[product.id] += price
+            prod_name[product.id] = f"{product.category.path} · {product.title}"
+            _roll_up(product.category, price)
+        elif it.content_type_id == ct_bu.id:
+            bundle = bundles.get(it.object_id)
+            if not bundle:
                 continue
-            _roll_up_chapter(c, price)
-        elif it.content_type_id == ct_un.id:
-            u = units.get(it.object_id)
-            if not u:
-                continue
-            unit_rev[u.id] += price; unit_name[u.id] = f"{u.subject.name} · {u.name}"
-            subj_rev[u.subject_id] += price; subj_name[u.subject_id] = u.subject.name
-        elif it.content_type_id == ct_su.id:
-            s = subjects.get(it.object_id)
-            if not s:
-                continue
-            subj_rev[s.id] += price; subj_name[s.id] = s.name
+            prod_rev[f"bundle-{bundle.id}"] += price
+            prod_name[f"bundle-{bundle.id}"] = f"{bundle.title} (bundle)"
+            _roll_up(bundle.category, price)
 
     def rank(rev, names):
         rows = [{"id": k, "name": names.get(k, f"#{k}"), "revenue": v} for k, v in rev.items()]
         return sorted(rows, key=lambda r: r["revenue"], reverse=True)
 
-    return rank(subj_rev, subj_name), rank(unit_rev, unit_name), rank(chap_rev, chap_name)
+    return rank(cat_rev, cat_name), rank(prod_rev, prod_name)
 
 
 class AdminRevenueView(APIView):
@@ -214,14 +208,13 @@ class AdminRevenueView(APIView):
                     .annotate(revenue=Sum("amount"), count=Count("id")).order_by("p"))
             return [{key: fmt(r["p"]), "revenue": r["revenue"], "count": r["count"]} for r in rows if r["p"]]
 
-        by_subject, by_unit, by_chapter = _breakdowns(paid)
+        by_category, by_product = _breakdowns(paid)
 
         return Response({
             "summary": summary,
             "daily": series(TruncDay, "date", lambda d: d.date().isoformat()),
             "monthly": series(TruncMonth, "month", lambda d: d.strftime("%Y-%m")),
             "yearly": series(TruncYear, "year", lambda d: str(d.year)),
-            "by_subject": by_subject,
-            "by_unit": by_unit,
-            "by_chapter": by_chapter,
+            "by_category": by_category,
+            "by_product": by_product,
         })

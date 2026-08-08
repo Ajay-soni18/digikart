@@ -1,24 +1,24 @@
-"""Note file pipeline: validate the admin's upload, generate the compressed
-rendition, and store both under deterministic, versioned object keys.
+"""Product-file pipeline: validate an upload, build a compressed rendition when
+it helps, and store everything under deterministic, versioned object keys.
 
 Storage layout (private R2 bucket in prod, local media in dev):
 
-    notes/{note_id}/{file_version}/original.pdf     - exactly what the admin uploaded
-    notes/{note_id}/{file_version}/compressed.pdf   - backend-generated fast preview
+    products/{product_id}/{file_version}/original{ext}
+    products/{product_id}/{file_version}/compressed.pdf   (PDFs only, optional)
 
 `file_version` is new on every (re)upload, so keys never collide, a re-upload
 can never serve mixed old/new pages, and the viewer's IndexedDB cache key
 (which includes the version) invalidates automatically.
 
-The compressed rendition exists so the first open of a 20-40 MB scanned note
-is fast: images are downsampled to reading DPI and re-encoded as JPEG, which
-lands around 10-15 % of the original for image-heavy scans. Readability wins
-over ratio — text/vector PDFs that barely shrink simply skip the compressed
-copy (the viewer then loads the original directly), and a compression problem
-is never fatal: the note still uploads with the original alone. Only invalid /
-corrupt / password-protected uploads are rejected, with a clean admin-facing
-error. All work happens in temp files (never whole-file RAM reads — see the
-512 MB OOM history) and the temp files are always removed.
+Generalised from the old note pipeline. PDFs keep the full treatment — validated
+for readability, then downsampled into a fast-opening rendition so the first
+open of a 20-40 MB scan isn't a wait. Every other type (zip, psd, mp3, epub…) is
+checked for size and stored as-is, because there is nothing meaningful to
+compress and no viewer to feed.
+
+All work happens in temp files — never whole-file RAM reads — and the temp files
+are always removed. A compression problem is never fatal: the file still uploads
+with the original alone.
 """
 
 import contextlib
@@ -34,14 +34,14 @@ from django.core.files import File
 from django.core.files.storage import default_storage
 from django.utils import timezone
 
-logger = logging.getLogger("digikart.notes")
+logger = logging.getLogger("digikart.catalog")
 
 
-class NoteFileError(Exception):
+class ProductFileError(Exception):
     """An upload problem the admin can act on (shown verbatim in the form)."""
 
 
-# --- Compression tuning ------------------------------------------------------
+# --- Compression tuning (PDF only) ------------------------------------------
 # Downsample images above _DPI_THRESHOLD to _DPI_TARGET and re-encode as JPEG.
 # 120 DPI ≈ crisp on-screen reading at fit-to-width; the original replaces each
 # page in the background anyway, so the compressed copy only has to look good
@@ -55,15 +55,40 @@ _MIN_BYTES_TO_COMPRESS = 1 * 1024 * 1024
 # Keep the compressed copy only if it actually earns its keep.
 _WORTHWHILE_RATIO = 0.90
 
+# A ceiling that stops a mis-selected file (a whole video library, a disk image)
+# from filling the bucket. Generous enough for real sample packs and PSDs.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
+# Extension → the FileType we record. Anything unlisted stores as OTHER, which
+# is a deliberate default: unknown types still sell, they just get no special
+# handling.
+_EXTENSION_TYPES = {
+    "pdf": "pdf",
+    "png": "image", "jpg": "image", "jpeg": "image", "gif": "image",
+    "webp": "image", "svg": "image", "dng": "image", "tif": "image", "tiff": "image",
+    "mp3": "audio", "wav": "audio", "flac": "audio", "aac": "audio", "m4a": "audio",
+    "mp4": "video", "mov": "video", "webm": "video", "mkv": "video",
+    "zip": "archive", "rar": "archive", "7z": "archive", "tar": "archive", "gz": "archive",
+    "doc": "document", "docx": "document", "txt": "document", "md": "document",
+    "epub": "document", "rtf": "document", "odt": "document",
+}
+
+
+def detect_file_type(filename):
+    """Best-effort FileType value from the uploaded filename's extension."""
+    ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+    return _EXTENSION_TYPES.get(ext, "other")
+
 
 @dataclass
-class ProcessedNote:
+class ProcessedFile:
     """Result of processing one upload. Paths are temp files owned by the
     caller — always call cleanup() after storing (or on failure)."""
 
     original_path: str
     original_size: int
     file_version: str
+    file_type: str
     page_count: int | None = None
     compressed_path: str | None = None
     compressed_size: int | None = None
@@ -75,13 +100,17 @@ class ProcessedNote:
                     os.unlink(path)
 
 
-def process_note_upload(upload, *, expect_pdf=True):
-    """Spool `upload` to a temp file, validate it, and (for PDFs) build the
-    compressed rendition. Returns a ProcessedNote; the caller must call
-    .cleanup() when done. Raises NoteFileError for problems the admin caused
-    (not a PDF, encrypted, empty)."""
+def process_upload(upload, *, file_type=None):
+    """Spool `upload` to a temp file, validate it, and — for PDFs — build the
+    compressed rendition.
+
+    Returns a ProcessedFile; the caller must call .cleanup() when done. Raises
+    ProductFileError for problems the admin caused (empty file, oversized, not
+    the PDF it claims to be, password-protected).
+    """
+    file_type = file_type or detect_file_type(getattr(upload, "name", ""))
     digest = hashlib.sha256()
-    fd, original_path = tempfile.mkstemp(prefix="digikart-note-", suffix=".upload")
+    fd, original_path = tempfile.mkstemp(prefix="digikart-product-", suffix=".upload")
     compressed_path = None
     try:
         with os.fdopen(fd, "wb") as out:
@@ -90,16 +119,21 @@ def process_note_upload(upload, *, expect_pdf=True):
                 out.write(chunk)
         original_size = os.path.getsize(original_path)
         if not original_size:
-            raise NoteFileError("That file is empty. Please choose the real PDF and try again.")
+            raise ProductFileError("That file is empty. Please choose the real file and try again.")
+        if original_size > MAX_UPLOAD_BYTES:
+            gb = MAX_UPLOAD_BYTES / (1024 ** 3)
+            raise ProductFileError(f"That file is larger than the {gb:.0f} GB limit.")
+
         # Timestamp + content hash: unique per upload, URL/key-safe (no colons),
         # and doubles as the cache-busting version the viewer keys on.
         file_version = f"{timezone.now():%Y%m%d%H%M%S}-{digest.hexdigest()[:8]}"
-        processed = ProcessedNote(
+        processed = ProcessedFile(
             original_path=original_path,
             original_size=original_size,
             file_version=file_version,
+            file_type=file_type,
         )
-        if expect_pdf:
+        if file_type == "pdf":
             processed.page_count = _validate_pdf(original_path)
             compressed_path = _build_compressed(processed)
         return processed
@@ -113,20 +147,20 @@ def process_note_upload(upload, *, expect_pdf=True):
 
 
 def _validate_pdf(path):
-    """Reject anything students couldn't read. Returns the page count."""
+    """Reject anything a buyer couldn't read. Returns the page count."""
     try:
         doc = pymupdf.open(path)
     except Exception as exc:
-        raise NoteFileError("That file doesn't appear to be a valid PDF.") from exc
+        raise ProductFileError("That file doesn't appear to be a valid PDF.") from exc
     try:
         if not doc.is_pdf:
-            raise NoteFileError("That file doesn't appear to be a valid PDF.")
+            raise ProductFileError("That file doesn't appear to be a valid PDF.")
         if doc.needs_pass:
-            raise NoteFileError(
+            raise ProductFileError(
                 "Password-protected PDFs aren't supported. Remove the password and upload again."
             )
         if doc.page_count < 1:
-            raise NoteFileError("That PDF has no pages.")
+            raise ProductFileError("That PDF has no pages.")
         return doc.page_count
     finally:
         doc.close()
@@ -138,7 +172,7 @@ def _build_compressed(processed):
     with the original alone, and a broken artifact is never kept."""
     if processed.original_size < _MIN_BYTES_TO_COMPRESS:
         return None
-    fd, comp_path = tempfile.mkstemp(prefix="digikart-note-", suffix=".compressed.pdf")
+    fd, comp_path = tempfile.mkstemp(prefix="digikart-product-", suffix=".compressed.pdf")
     os.close(fd)
     try:
         with pymupdf.open(processed.original_path) as doc:
@@ -164,35 +198,37 @@ def _build_compressed(processed):
         processed.compressed_path = comp_path
         processed.compressed_size = comp_size
         logger.info(
-            "note compressed: %d -> %d bytes (%.0f%% of original)",
+            "product file compressed: %d -> %d bytes (%.0f%% of original)",
             processed.original_size, comp_size, comp_size / processed.original_size * 100,
         )
         return comp_path
     except Exception as exc:  # noqa: BLE001 — by design: compression never blocks an upload
         with contextlib.suppress(OSError):
             os.unlink(comp_path)
-        logger.warning("note compression skipped, storing original only: %s", exc)
+        logger.warning("compression skipped, storing original only: %s", exc)
         return None
 
 
-def safe_extension(filename, *, default=".pdf"):
+def safe_extension(filename, *, default=".bin"):
     """A storage-key-safe extension taken from the uploaded filename."""
     ext = os.path.splitext(filename or "")[1].lower()
     return ext if re.fullmatch(r"\.[a-z0-9]{1,8}", ext) else default
 
 
-def object_keys(note_id, file_version, *, ext=".pdf"):
-    """The deterministic storage keys for a note upload."""
-    base = f"notes/{note_id}/{file_version}"
+def object_keys(product_id, file_version, *, ext=".pdf"):
+    """The deterministic storage keys for one product-file upload."""
+    base = f"products/{product_id}/{file_version}"
     return f"{base}/original{ext}", f"{base}/compressed.pdf"
 
 
-def store_note_files(note_id, processed, *, ext=".pdf"):
+def store_files(product_id, processed, *, ext=".pdf"):
     """Upload the original (and compressed copy, when present) to storage.
+
     Returns (original_key, compressed_key) — compressed_key is "" when there is
     no compressed rendition. On any failure the objects already written are
-    removed, so storage never holds a half-uploaded note."""
-    original_key, compressed_key = object_keys(note_id, processed.file_version, ext=ext)
+    removed, so storage never holds a half-uploaded product file.
+    """
+    original_key, compressed_key = object_keys(product_id, processed.file_version, ext=ext)
     saved = []
     try:
         with open(processed.original_path, "rb") as fh:
@@ -208,12 +244,12 @@ def store_note_files(note_id, processed, *, ext=".pdf"):
             compressed_key = ""
         return original_key, compressed_key
     except Exception:
-        delete_note_objects(*saved)
+        delete_objects(*saved)
         raise
 
 
-def delete_note_objects(*keys):
-    """Best-effort storage cleanup (old versions, replaced/deleted notes).
+def delete_objects(*keys):
+    """Best-effort storage cleanup (old versions, replaced/deleted files).
     Failures are logged, never raised — a leftover object costs cents; a failed
     admin request costs trust."""
     for key in keys:
@@ -222,4 +258,4 @@ def delete_note_objects(*keys):
         try:
             default_storage.delete(key)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("could not delete note object %r: %s", key, exc)
+            logger.warning("could not delete object %r: %s", key, exc)

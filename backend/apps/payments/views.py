@@ -17,13 +17,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.content.models import Chapter, Note, Subject, Unit
+from apps.catalog.entitlements import grant, owns_object, owns_product
+from apps.catalog.models import Bundle, BundleItem, BundleMembership, Product
+from apps.catalog.pricing import label_of, price_of, purchasable
 
 from . import coupons
 from .coupons import CouponError, normalize_code
-from .entitlements import grant, user_owns_chapter, user_owns_note, user_owns_object
 from .models import Entitlement, Order, OrderItem
-from .pricing import label_of, price_of, purchasable
 from .razorpay_client import (
     create_order,
     keys_configured,
@@ -63,42 +63,93 @@ def fulfill_order(order, payment_id="", signature=""):
         coupons.consume_for_order(order)
     return True
 
-TYPE_MODELS = {"note": Note, "chapter": Chapter, "unit": Unit, "subject": Subject}
+TYPE_MODELS = {"product": Product, "bundle": Bundle}
 
 
 def _is_owned(user, obj):
-    """Owned if held directly, or via a parent entitlement higher up the tree."""
-    if isinstance(obj, Note):
-        return user_owns_note(user, obj)
-    if isinstance(obj, Chapter):
-        return user_owns_chapter(user, obj)
-    if isinstance(obj, Unit):
-        return user_owns_object(user, obj) or user_owns_object(user, obj.subject)
-    return user_owns_object(user, obj)
+    """Owned directly, or — for a product — through any bundle containing it."""
+    if isinstance(obj, Product):
+        return owns_product(user, obj)
+    return owns_object(user, obj)
 
 
-def _ancestor_keys(obj):
-    """The (type, id) keys of everything above `obj` in the content tree. Buying
-    any of these unlocks `obj`, so if one is also in the same cart, `obj` is
-    redundant and must not be charged (or granted) a second time."""
-    if isinstance(obj, Note):
-        ch = obj.chapter
-        return [("chapter", ch.id), ("unit", ch.unit_id), ("subject", ch.unit.subject_id)]
-    if isinstance(obj, Chapter):
-        return [("unit", obj.unit_id), ("subject", obj.unit.subject_id)]
-    if isinstance(obj, Unit):
-        return [("subject", obj.subject_id)]
+def _covering_keys(obj, present):
+    """The cart keys that already cover `obj`, so it must not be charged twice.
+
+    A product is covered by any bundle in the same cart that contains it; a
+    bundle is covered by any other bundle in the cart that nests it. Both
+    questions are answered by the membership closure rather than by walking a
+    hierarchy, because the flat catalog has none.
+    """
+    cart_bundle_ids = [i for kind, i in present if kind == "bundle"]
+    if not cart_bundle_ids:
+        return []
+    if isinstance(obj, Product):
+        covering = BundleMembership.objects.filter(
+            product=obj, bundle_id__in=cart_bundle_ids
+        ).values_list("bundle_id", flat=True)
+        return [("bundle", b) for b in covering]
+    if isinstance(obj, Bundle):
+        # A cart bundle covers this one when it unlocks everything this one does.
+        #
+        # A plain subset test is not enough: two bundles can unlock the *same*
+        # products (an outer bundle whose only member is an inner one), and then
+        # each would cover the other and the whole cart would price at zero. So
+        # equal sets are broken by nesting — the bundle that actually contains
+        # the other wins — and, failing that, by id, which guarantees exactly one
+        # survivor rather than none.
+        mine = set(
+            BundleMembership.objects.filter(bundle=obj).values_list("product_id", flat=True)
+        )
+        if not mine:
+            return []
+        covering = []
+        for other_id in cart_bundle_ids:
+            if other_id == obj.id:
+                continue
+            theirs = set(
+                BundleMembership.objects.filter(bundle_id=other_id)
+                .values_list("product_id", flat=True)
+            )
+            if not mine <= theirs:
+                continue
+            if mine < theirs:
+                covering.append(("bundle", other_id))          # strictly larger: it wins
+            elif _nests(other_id, obj.id):
+                covering.append(("bundle", other_id))          # same reach, but it contains us
+            elif not _nests(obj.id, other_id) and other_id < obj.id:
+                covering.append(("bundle", other_id))          # unrelated twins: lowest id wins
+        return covering
     return []
+
+
+def _nests(outer_id, inner_id):
+    """True if bundle `outer_id` contains `inner_id` somewhere beneath it."""
+    bundle_ct = ContentType.objects.get_for_model(Bundle)
+    seen, stack = set(), [outer_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        children = BundleItem.objects.filter(
+            bundle_id=current, content_type=bundle_ct
+        ).values_list("object_id", flat=True)
+        for child in children:
+            if child == inner_id:
+                return True
+            stack.append(child)
+    return False
 
 
 def resolve_cart(user, raw_items):
     """Turn cart items into priced, server-validated lines. Items that are already
-    owned, or *covered by a higher-level item present in the same cart* (e.g. a
-    note whose chapter is also in the cart, or a chapter under a subject in the
-    cart), are flagged and excluded from the payable total — so overlapping cart
-    items are never charged twice, no matter what the client sends."""
+    owned, or *covered by a bundle present in the same cart* (a product whose
+    bundle is also in the cart, or a bundle nested inside another one there), are
+    flagged and excluded from the payable total — so overlapping cart items are
+    never charged twice, no matter what the client sends."""
     # De-dupe first so we know every distinct (type, id) the cart contains; the
-    # coverage check below tests each item's ancestors against this set.
+    # coverage check below tests each item against that set.
     present = set()
     unique = []
     for it in raw_items:
@@ -112,15 +163,15 @@ def resolve_cart(user, raw_items):
     for it in unique:
         model = TYPE_MODELS[it["type"]]
         obj = get_object_or_404(model, pk=it["id"], is_published=True)
-        # Anything that can't be bought on its own — a free / ₹0 note, or a
-        # chapter/unit/subject the admin marked "not sold as a bundle" — is
-        # rejected here so it can't be priced (and certainly can't slip through at
-        # ₹0 and grant a free hierarchical entitlement). Only its contents sell.
+        # Anything that can't be bought on its own — a free product, or one
+        # left at ₹0 because it only sells inside a bundle — is rejected here so
+        # it can't be priced (and certainly can't slip through at ₹0 and grant a
+        # free entitlement).
         if not purchasable(obj):
             raise ValidationError(
                 f"“{label_of(obj)}” isn’t available for individual purchase."
             )
-        covered = any(k in present for k in _ancestor_keys(obj))
+        covered = bool(_covering_keys(obj, present))
         lines.append({
             "type": it["type"],
             "id": obj.id,
@@ -134,8 +185,8 @@ def resolve_cart(user, raw_items):
 
 
 def _payable(line):
-    """A cart line the student must actually pay for: not already owned, and not
-    covered by a higher-level item in the same cart."""
+    """A cart line the buyer must actually pay for: not already owned, and not
+    covered by a bundle in the same cart."""
     return not line["owned"] and not line["covered"]
 
 
@@ -336,13 +387,15 @@ class MyPurchasesView(APIView):
             Order.objects.filter(user=request.user, status=Order.Status.PAID)
             .prefetch_related("items")
         )
-        ct = {m: ContentType.objects.get_for_model(m) for m in (Note, Chapter, Unit, Subject)}
+        ct = {m: ContentType.objects.get_for_model(m) for m in (Product, Bundle)}
         ents = Entitlement.objects.filter(user=request.user, is_active=True)
         owned = {
-            "notes": list(ents.filter(content_type=ct[Note]).values_list("object_id", flat=True)),
-            "chapters": list(ents.filter(content_type=ct[Chapter]).values_list("object_id", flat=True)),
-            "units": list(ents.filter(content_type=ct[Unit]).values_list("object_id", flat=True)),
-            "subjects": list(ents.filter(content_type=ct[Subject]).values_list("object_id", flat=True)),
+            "products": list(
+                ents.filter(content_type=ct[Product]).values_list("object_id", flat=True)
+            ),
+            "bundles": list(
+                ents.filter(content_type=ct[Bundle]).values_list("object_id", flat=True)
+            ),
         }
         return Response({
             "orders": [

@@ -19,5 +19,5 @@ urlpatterns = [
     path("bookmarks/", BookmarkListView.as_view(), name="bookmarks"),
     path("bookmarks/toggle/", BookmarkToggleView.as_view(), name="bookmark-toggle"),
     path("progress/", ProgressView.as_view(), name="progress"),
-    path("progress/lecture/<int:lecture_id>/", ProgressMarkView.as_view(), name="progress-mark"),
+    path("progress/product/<int:product_id>/", ProgressMarkView.as_view(), name="progress-mark"),
 ]

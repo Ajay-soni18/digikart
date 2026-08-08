@@ -125,19 +125,20 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Profile(models.Model):
-    """Optional extra student details. Kept separate so the core User stays lean
-    and we can grow student-facing fields without touching auth."""
+    """Optional extra buyer details. Kept separate so the core User stays lean
+    and we can grow buyer-facing fields without touching auth.
 
-    class StudyYear(models.IntegerChoices):
-        FIRST = 1, "MBBS 1st Year"
-        SECOND = 2, "MBBS 2nd Year"
-        THIRD = 3, "MBBS 3rd Year"
-        FOURTH = 4, "MBBS 4th Year"
+    Deliberately domain-neutral: this used to carry MBBS year choices, which
+    only made sense while the catalog was a medical curriculum. `headline` is
+    free text so it fits a student, a photographer or anyone else.
+    """
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-    college = models.CharField(max_length=200, blank=True)
-    study_year = models.PositiveSmallIntegerField(
-        choices=StudyYear.choices, null=True, blank=True
+    organisation = models.CharField(
+        max_length=200, blank=True, help_text="College, studio, company — whatever fits.",
+    )
+    headline = models.CharField(
+        max_length=200, blank=True, help_text='Free text, e.g. "2nd year medical student".',
     )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
     bio = models.TextField(blank=True)

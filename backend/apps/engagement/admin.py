@@ -24,5 +24,5 @@ class BookmarkAdmin(admin.ModelAdmin):
 
 @admin.register(Progress)
 class ProgressAdmin(admin.ModelAdmin):
-    list_display = ("user", "lecture", "completed", "updated_at")
+    list_display = ("user", "product", "completed", "updated_at")
     list_filter = ("completed",)

@@ -71,8 +71,8 @@ class ContactMessage(models.Model):
 class Bookmark(models.Model):
     """A saved item (generic, so it grows with content types).
 
-    For paginated content like a Note's PDF, `page` pins the bookmark to a single
-    page; whole-object bookmarks (e.g. a Lecture) leave `page` null."""
+    For paginated content like a PDF, `page` pins the bookmark to a single
+    page; whole-object bookmarks leave `page` null."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bookmarks")
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -93,16 +93,16 @@ class Bookmark(models.Model):
 
 
 class Progress(models.Model):
-    """Tracks whether a user has marked a lecture complete (+ last touched)."""
+    """Tracks whether a user has marked a product complete (+ last touched)."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progress")
-    lecture = models.ForeignKey("content.Lecture", on_delete=models.CASCADE, related_name="progress")
+    product = models.ForeignKey("catalog.Product", on_delete=models.CASCADE, related_name="progress")
     completed = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-updated_at"]
-        unique_together = [("user", "lecture")]
+        unique_together = [("user", "product")]
 
     def __str__(self):
-        return f"{self.user.email} · {self.lecture} · {'done' if self.completed else 'in progress'}"
+        return f"{self.user.email} · {self.product} · {'done' if self.completed else 'in progress'}"

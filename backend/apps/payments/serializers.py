@@ -113,7 +113,7 @@ class AdminCouponSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.Serializer):
-    type = serializers.ChoiceField(choices=["note", "chapter", "unit", "subject"])
+    type = serializers.ChoiceField(choices=["product", "bundle"])
     id = serializers.IntegerField(min_value=1)
 
 
