@@ -71,26 +71,7 @@ class BundlePricing(models.TextChoices):
     CUSTOM = "custom", "Custom price"
 
 
-class LegacyRef(models.Model):
-    """Provenance of a row created by the Phase 2 backfill.
-
-    `legacy_kind` names the old model ("chapter", "note", …) and `legacy_id` its
-    primary key. Three things depend on this: the backfill is idempotent (it
-    get_or_creates on the pair rather than duplicating on a re-run), the parity
-    checker can pair an old object with its new counterpart, and a human can
-    trace any migrated row back to what it came from.
-
-    Dropped in Phase 5 along with apps/content.
-    """
-
-    legacy_kind = models.CharField(max_length=24, blank=True, default="", db_index=True)
-    legacy_id = models.PositiveIntegerField(null=True, blank=True)
-
-    class Meta:
-        abstract = True
-
-
-class Category(LegacyRef, TimeStamped):
+class Category(TimeStamped):
     """A navigation node. Nests to any depth via `parent`.
 
     Carries NO price and is never the target of an Entitlement — buying is done
@@ -112,13 +93,6 @@ class Category(LegacyRef, TimeStamped):
     class Meta:
         ordering = ["order", "id"]
         verbose_name_plural = "categories"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["legacy_kind", "legacy_id"],
-                condition=models.Q(legacy_id__isnull=False),
-                name="catalog_category_unique_legacy_ref",
-            ),
-        ]
 
     def __str__(self):
         return self.name
@@ -157,7 +131,7 @@ class Category(LegacyRef, TimeStamped):
         return " · ".join([c.name for c in self.ancestors] + [self.name])
 
 
-class Product(LegacyRef, TimeStamped):
+class Product(TimeStamped):
     """The sellable unit — what used to be a Note.
 
     `youtube_url` is an optional free, public hook shown to everyone (it can't be
@@ -189,13 +163,6 @@ class Product(LegacyRef, TimeStamped):
 
     class Meta:
         ordering = ["order", "id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["legacy_kind", "legacy_id"],
-                condition=models.Q(legacy_id__isnull=False),
-                name="catalog_product_unique_legacy_ref",
-            ),
-        ]
 
     def __str__(self):
         return self.title
@@ -224,7 +191,7 @@ class Product(LegacyRef, TimeStamped):
         super().save(*args, **kwargs)
 
 
-class ProductFile(LegacyRef, TimeStamped):
+class ProductFile(TimeStamped):
     """One downloadable/viewable file belonging to a Product.
 
     `delivery` picks how the buyer receives it:
@@ -234,8 +201,8 @@ class ProductFile(LegacyRef, TimeStamped):
                   the original upgrades pages in the background. PDF only.
       DOWNLOAD  — a short-lived signed URL the browser saves to disk. Any type.
 
-    Storage fields carry over unchanged from the old Note model so migrated rows
-    keep working against the objects already in R2 without re-upload. Keys are
+    Files live in a private bucket and are never proxied by Django: a request is
+    access-checked and answered with a short-lived presigned URL. Keys are
     `products/{product_id}/{file_version}/{original,compressed}.{ext}`; the
     version changes on every re-upload, which prevents mixed old/new pages and
     invalidates the viewer's IndexedDB cache.
@@ -274,11 +241,6 @@ class ProductFile(LegacyRef, TimeStamped):
         max_length=40, blank=True, default="",
         help_text="Changes on every (re)upload; versions keys + viewer caches.",
     )
-    legacy_file = models.FileField(
-        max_length=500, blank=True,
-        help_text="Pre-R2 rows migrated from Note.file; served as a single rendition.",
-    )
-
     page_count = models.PositiveIntegerField(null=True, blank=True)
     size_bytes = models.BigIntegerField(null=True, blank=True)
     compressed_size_bytes = models.BigIntegerField(null=True, blank=True)
@@ -288,13 +250,6 @@ class ProductFile(LegacyRef, TimeStamped):
 
     class Meta:
         ordering = ["order", "id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["legacy_kind", "legacy_id"],
-                condition=models.Q(legacy_id__isnull=False),
-                name="catalog_productfile_unique_legacy_ref",
-            ),
-        ]
 
     def __str__(self):
         return self.title
@@ -307,8 +262,8 @@ class ProductFile(LegacyRef, TimeStamped):
 
     @property
     def storage_key(self):
-        """The key to sign for the full-quality rendition, legacy rows included."""
-        return self.original_key or (self.legacy_file.name if self.legacy_file else "")
+        """The key to sign for the full-quality rendition."""
+        return self.original_key
 
     @property
     def version(self):
@@ -316,7 +271,7 @@ class ProductFile(LegacyRef, TimeStamped):
         return self.file_version or (self.updated_at.isoformat() if self.updated_at else "")
 
 
-class Bundle(LegacyRef, TimeStamped):
+class Bundle(TimeStamped):
     """A sellable set of Products and/or other Bundles.
 
     Membership is resolved at read time (via BundleMembership), so adding a
@@ -349,13 +304,6 @@ class Bundle(LegacyRef, TimeStamped):
 
     class Meta:
         ordering = ["order", "id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["legacy_kind", "legacy_id"],
-                condition=models.Q(legacy_id__isnull=False),
-                name="catalog_bundle_unique_legacy_ref",
-            ),
-        ]
 
     def __str__(self):
         return self.title

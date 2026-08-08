@@ -6,6 +6,7 @@ that makes both cheap.
 """
 
 from decimal import Decimal
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -27,7 +28,7 @@ from .models import (
     Product,
     ProductFile,
 )
-from .pricing import NotPurchasable, bundle_price, price_of, purchasable
+from .pricing import NotPurchasable, bundle_price, price_of, purchasable  # noqa: F401
 
 User = get_user_model()
 
@@ -332,8 +333,47 @@ class ProductFileTests(CatalogTestCase):
         self.assertFalse(file_accessible(self.user, pf))
         self.assertTrue(file_accessible(self.staff, pf))
 
-    def test_legacy_file_supplies_the_storage_key(self):
-        product = self.product("Legacy")
-        pf = self.make_file(product, original_key="")
-        pf.legacy_file.name = "notes/path/old.pdf"
-        self.assertEqual(pf.storage_key, "notes/path/old.pdf")
+    def test_storage_key_is_the_original_key(self):
+        product = self.product("P")
+        pf = self.make_file(product, original_key="products/7/v3/original.pdf")
+        self.assertEqual(pf.storage_key, "products/7/v3/original.pdf")
+
+
+class SeedCatalogTests(TestCase):
+    """The seeder is how anyone gets a working local catalog, so it has to keep
+    running — and the `creative` preset is the standing proof that the model
+    hasn't drifted back into being education-shaped."""
+
+    def seed(self, preset):
+        call_command("seed_catalog", "--preset", preset, "--reset", stdout=StringIO())
+
+    def test_study_preset_builds_a_priced_catalog(self):
+        self.seed("study")
+        self.assertTrue(Category.objects.filter(name="Pathology").exists())
+        self.assertTrue(Product.objects.filter(is_free=False, price__gt=0).exists())
+        self.assertTrue(BundleMembership.objects.exists())
+
+    def test_creative_preset_expresses_an_unrelated_domain(self):
+        self.seed("creative")
+        photography = Bundle.objects.get(title="Photography — Everything")
+        self.assertEqual(bundle_price(photography), Decimal("1096.00"))
+        # Non-PDF products must be plain downloads, not the protected viewer.
+        archives = ProductFile.objects.filter(file_type=ProductFile.FileType.ARCHIVE)
+        self.assertTrue(archives.exists())
+        for product_file in archives:
+            self.assertEqual(product_file.delivery, ProductFile.Delivery.DOWNLOAD)
+
+    def test_reseeding_does_not_duplicate(self):
+        self.seed("both")
+        counts = (Category.objects.count(), Product.objects.count(), Bundle.objects.count())
+        call_command("seed_catalog", "--preset", "both", stdout=StringIO())
+        self.assertEqual(
+            counts, (Category.objects.count(), Product.objects.count(), Bundle.objects.count())
+        )
+
+    def test_free_products_are_never_put_inside_a_bundle(self):
+        """Free products need no entitlement; including them would inflate a SUM
+        bundle's member list for no reason."""
+        self.seed("both")
+        for membership in BundleMembership.objects.select_related("product"):
+            self.assertFalse(membership.product.is_free)
