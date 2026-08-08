@@ -25,7 +25,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.catalog.access import product_unlocked
-from apps.catalog.models import Category, Product
+from apps.catalog.models import Category
 from apps.catalog.testing import add_member, bundle, category, product, product_file
 
 from .models import Coupon, CouponRedemption, Entitlement, Order
@@ -52,7 +52,7 @@ class PaymentForgeryTests(TestCase):
         self.bob = User.objects.create_user(
             email="bob@example.com", full_name="Bob", password="Pass@1234"
         )
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.p1 = product(self.cat, "A1", "40.00")
         self.p2 = product(self.cat, "B1", "30.00")
         self.b1 = bundle("Bundle A", self.p1, price="99.00")
@@ -176,12 +176,12 @@ class SignedUrlAccessTests(TestCase):
         self.admin = User.objects.create_user(
             email="admin@example.com", password="Pass@1234", is_staff=True
         )
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.mine = product(self.cat, "Mine", "49.00")
         self.sibling = product(self.cat, "Sibling", "49.00")
         self.mine_file = product_file(self.mine)
         self.sibling_file = product_file(self.sibling)
-        self.bundle = bundle("Chapter", self.mine, price="99.00")
+        self.bundle = bundle("Starter Set", self.mine, price="99.00")
 
     def _get(self, user, file_id):
         client = APIClient()
@@ -258,7 +258,7 @@ class CouponSecurityTests(TestCase):
         cache.clear()
         self.user = User.objects.create_user(email="c@example.com", password="Pass@1234")
         self.user2 = User.objects.create_user(email="c2@example.com", password="Pass@1234")
-        self.cat = category("Biochem")
+        self.cat = category("Design")
         self.p = product(self.cat, "Kinetics", "100.00")
         self.b = bundle("Kinetics Bundle", self.p, price="100.00")
         self.client = APIClient()
@@ -337,13 +337,13 @@ class CartDedupeTests(TestCase):
     def setUp(self):
         cache.clear()
         self.alice = User.objects.create_user(email="alice@example.com", password="Pass@1234")
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.a1 = product(self.cat, "A1", "40.00")
         self.b1 = product(self.cat, "B1", "30.00")
         self.bundleA = bundle("ChA", self.a1, price="100.00")
         self.bundleB = bundle("ChB", self.b1, price="60.00")
         self.inner = bundle("Unit", self.bundleA, self.bundleB, price="200.00")
-        self.outer = bundle("Subject", self.inner, price="400.00")
+        self.outer = bundle("Everything", self.inner, price="400.00")
 
     def _client(self):
         c = APIClient()

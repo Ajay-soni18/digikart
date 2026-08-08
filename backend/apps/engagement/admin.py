@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Announcement, Bookmark, ContactMessage, Progress
+from .models import Announcement, Bookmark, ContactMessage
 
 
 @admin.register(Announcement)
@@ -20,9 +20,3 @@ class ContactMessageAdmin(admin.ModelAdmin):
 @admin.register(Bookmark)
 class BookmarkAdmin(admin.ModelAdmin):
     list_display = ("user", "content_type", "object_id", "created_at")
-
-
-@admin.register(Progress)
-class ProgressAdmin(admin.ModelAdmin):
-    list_display = ("user", "product", "completed", "updated_at")
-    list_filter = ("completed",)

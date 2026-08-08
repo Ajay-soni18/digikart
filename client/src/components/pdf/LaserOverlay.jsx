@@ -13,7 +13,7 @@
  *    Resuming before it's gone snaps it back to full opacity (you're still
  *    writing, so previous ink stays). Nothing here is permanent.
  *  - Strokes are PURELY EPHEMERAL: nothing is stored, serialised, or sent
- *    anywhere. They never survive a page change, note switch, refresh, or reopen.
+ *    anywhere. They never survive a page change, file switch, refresh, or reopen.
  *  - Coordinates are kept NORMALISED (0..1 of the page box), so a zoom (which
  *    changes the page's pixel size) re‑anchors any in‑flight strokes to the same
  *    spot on the page instead of drifting. getBoundingClientRect() maps the
@@ -217,8 +217,8 @@ export function LaserOverlay({ active, width, height, resetKey }) {
     }
   }, [width, height, sizeCanvas, ensureLoop]);
 
-  // Wipe instantly on a note switch (resetKey changes) — no stale ink ever
-  // crosses between notes that happen to reuse this slot.
+  // Wipe instantly on a file switch (resetKey changes) — no stale ink ever
+  // crosses between files that happen to reuse this slot.
   useEffect(() => {
     strokesRef.current = [];
     drawingRef.current = null;

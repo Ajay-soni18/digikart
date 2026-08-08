@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Announcement, ContactMessage, Progress
+from .models import Announcement, ContactMessage
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -34,7 +34,3 @@ class AdminContactMessageSerializer(serializers.ModelSerializer):
         model = ContactMessage
         fields = ("id", "name", "email", "message", "status", "created_at")
         read_only_fields = ("name", "email", "message", "created_at")
-
-
-class ProgressMarkSerializer(serializers.Serializer):
-    completed = serializers.BooleanField(default=True)

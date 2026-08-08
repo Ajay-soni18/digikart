@@ -101,7 +101,7 @@ export function CartBar() {
         onSuccess={() => {
           clear();
           notifyPurchase();
-          showFlash("Payment successful — your notes are unlocked! 🎉");
+          showFlash("Payment successful — your purchase is unlocked! 🎉");
         }}
         onUnconfigured={() => showFlash("Payments aren’t enabled yet — please try again later.", false)}
       />

@@ -1,6 +1,5 @@
 /*
- * Razorpay checkout orchestration, shared by the subject cart and the locked
- * notes viewer.
+ * Razorpay checkout orchestration, shared by every buy surface.
  *
  *   createOrder (backend, server-priced)
  *     → open Razorpay widget (checkout.js, loaded in index.html)
@@ -42,7 +41,7 @@ export async function startCheckout({ items, coupon, user, onSuccess, onError, o
     amount: order.amount,
     currency: order.currency,
     name: "Digikart",
-    description: "Notes purchase",
+    description: "Digikart purchase",
     order_id: order.razorpay_order_id,
     prefill: { name: user?.full_name, email: user?.email },
     theme: { color: "#a229c3" },

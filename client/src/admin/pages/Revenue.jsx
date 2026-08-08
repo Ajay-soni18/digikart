@@ -1,6 +1,6 @@
 /*
  * Admin "Revenue & Transactions" — revenue analytics (total + today/month/year,
- * subject/unit/chapter breakdowns) and a full transaction log with Razorpay
+ * category/item breakdowns) and a full transaction log with Razorpay
  * status, user details and date/time, so the admin can audit who paid and
  * which payments succeeded vs failed. Everything is date-range filterable.
  */
@@ -213,7 +213,7 @@ export default function Revenue() {
               <thead className="bg-canvas text-ink-soft">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Date &amp; time</th>
-                  <th className="px-4 py-3 font-semibold">Student</th>
+                  <th className="px-4 py-3 font-semibold">Buyer</th>
                   <th className="px-4 py-3 font-semibold">Items</th>
                   <th className="px-4 py-3 font-semibold">Amount</th>
                   <th className="px-4 py-3 font-semibold">Status</th>

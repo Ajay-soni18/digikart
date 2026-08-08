@@ -14,7 +14,7 @@ export default function Coupons() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Coupons</h1>
         <p className="text-sm text-ink-soft">
-          Discount codes students can apply at checkout. Usage is counted only when a payment succeeds.
+          Discount codes buyers can apply at checkout. Usage is counted only when a payment succeeds.
         </p>
       </div>
       <CrudPanel

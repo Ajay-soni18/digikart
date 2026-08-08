@@ -21,20 +21,16 @@ Pillow==12.2.0
 # Payments
 razorpay==2.0.1
 
-# YouTube Data API calls for the admin playlist import (apps/content/youtube.py).
-# Already present transitively via razorpay/boto3; pinned since we import it directly.
+# HTTP transport for google-auth's ID-token verification (apps/accounts/google.py).
+# Pulled in transitively, but pinned because it sits on the login path.
 requests==2.34.2
 
-# PDF processing at admin upload time (apps/content/note_files.py): validates
+# PDF processing at admin upload time (apps/catalog/files.py): validates
 # the upload and generates the compressed fast-preview rendition. Pure pip
 # wheel (bundles MuPDF) — no system Ghostscript/qpdf needed, so it works on
-# PaaS hosts like Render. Notes are watermarked CLIENT-SIDE (pdf.js draws the
+# PaaS hosts like Render. Files are watermarked CLIENT-SIDE (pdf.js draws the
 # buyer's email + name on each page canvas), not here.
 pymupdf==1.27.2.3
-
-# PDF generation for the test suite only — apps/content/tests.py synthesizes
-# sample PDFs with it.
-reportlab==4.5.1
 
 # Production: WSGI server, static serving, Cloudflare R2 media storage
 # (S3-compatible, via django-storages + boto3), Redis cache

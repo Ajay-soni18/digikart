@@ -9,7 +9,7 @@
  *  - Continuous vertical scroll; pages render lazily as they near the viewport
  *    and are cleared when far away to bound memory.
  *  - Prev / Next / jump-to-page still work (they scroll to the page).
- *  - Remembers the last page you were on (per note) and resumes there.
+ *  - Remembers the last page you were on (per file) and resumes there.
  *  - Zoom: buttons + pinch (two-finger touch / trackpad / ctrl-wheel), kept in
  *    sync so the % label always reflects the real zoom. Zoomed pages pan freely
  *    on both axes with no edge clipping.
@@ -26,19 +26,19 @@ import * as pdfjsLib from "pdfjs-dist/build/pdf";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker?worker";
 import { FiMaximize2, FiMinimize2, FiStar, FiEdit3 } from "react-icons/fi";
 import { useAuth } from "../../auth/AuthContext";
-import { createFileSource } from "../../lib/notesSource";
+import { createFileSource } from "../../lib/fileSource";
 import { engagementApi } from "../../lib/engagementApi";
 import { Button } from "../ui/Button";
 import { LaserOverlay } from "./LaserOverlay";
 
 // ONE explicit PDFWorker shared by every document. The viewer can hold TWO
-// live documents per note (the compressed primary + the original upgrading in
+// live documents per file (the compressed primary + the original upgrading in
 // the background); passing the worker explicitly makes pdf.js treat it as
 // caller-owned, so destroying one document never tears down the worker the
 // other still needs (the implicit global-port path destroys it per task).
 const sharedPdfWorker = new pdfjsLib.PDFWorker({ port: new pdfjsWorker() });
 
-/* getDocument() params for a resolved note source: cache hit (full bytes in
+/* getDocument() params for a resolved file source: cache hit (full bytes in
    memory), Range transport (on-demand byte ranges — our prefetch controller
    pulls pages in priority order), or plain URL (dev / no-Range storage). */
 function docParams(source) {
@@ -78,7 +78,7 @@ function drawWatermark(canvas, text) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0); // device pixels; ignore any transform pdf.js left
   // Font scales with the rendered page width (W grows/shrinks with zoom), so the
-  // mark stays a CONSTANT size relative to the notes at every zoom — no absolute
+  // mark stays a CONSTANT size relative to the page at every zoom — no absolute
   // px clamp (a clamp makes it look bigger when zoomed out, smaller when zoomed in).
   ctx.font = `bold ${Math.round(W / 42)}px Helvetica, Arial, sans-serif`;
   ctx.fillStyle = "rgba(72, 26, 97, 0.36)";
@@ -197,7 +197,7 @@ const PageSlot = memo(function PageSlot({
 
 export function PdfViewer({ fileId, productId, version }) {
   const { user } = useAuth();
-  const userId = user?.id; // cache scope: a note is cached per (user, note, version)
+  const userId = user?.id; // cache scope: a file is cached per (user, file, version)
   // Burned onto every page client-side (server no longer watermarks the bytes):
   // the buyer's email plus their name (from their Google profile). If Google
   // gave no name, it gracefully falls back to just the email.
@@ -233,7 +233,7 @@ export function PdfViewer({ fileId, productId, version }) {
   const [laserActive, setLaserActive] = useState(false);
 
   // Which rendition the PRIMARY document is ("original" when it came from the
-  // original cache / a note with no compressed copy — then no upgrade pass runs).
+  // original cache / a file with no compressed copy — then no upgrade pass runs).
   const [primaryQuality, setPrimaryQuality] = useState(null);
   // The ORIGINAL document loading in the background, the set of page numbers
   // whose full-quality data is ready (those slots re-render from hqPdf, each
@@ -264,7 +264,7 @@ export function PdfViewer({ fileId, productId, version }) {
 
   // The previous document's teardown. The shared pdf.js worker rejects a new
   // getDocument() while a prior loadingTask.destroy() is still in flight, so we
-  // await this before loading the next note (fixes flaky every-other-switch).
+  // await this before loading the next file (fixes flaky every-other-switch).
   const destroyRef = useRef(Promise.resolve());
 
   const targetWidth = Math.round(baseWidth * zoom);
@@ -305,13 +305,13 @@ export function PdfViewer({ fileId, productId, version }) {
     const ac = new AbortController();
     setLoading(true);
     setError(null);
-    userScrolledRef.current = false; // fresh note: don't persist until the user scrolls
+    userScrolledRef.current = false; // fresh file: don't persist until the user scrolls
     fetchedRef.current = new Set();
     setPrefetchCenter(null);
     setPriorityReady(false);
     setPriorityLoaded(0);
     setPriorityTotal(0);
-    // Fresh note: forget the previous note's quality-upgrade state.
+    // Fresh file: forget the previous file's quality-upgrade state.
     hqFetchedRef.current = new Set();
     setHqPdf(null);
     setHqPages(new Set());
@@ -319,7 +319,7 @@ export function PdfViewer({ fileId, productId, version }) {
     setPrimaryQuality(null);
     (async () => {
       try {
-        // Wait for any previous note's document teardown to finish first.
+        // Wait for any previous file's document teardown to finish first.
         await destroyRef.current;
         if (cancelled) return;
         // The file comes from (in priority order): the local IndexedDB cache
@@ -336,7 +336,7 @@ export function PdfViewer({ fileId, productId, version }) {
           // the viewer forever — surface it as an error instead.
           onFatal: () => {
             if (!cancelled) {
-              setError("Could not load the notes. Please check your connection and try again.");
+              setError("Could not load this file. Please check your connection and try again.");
               setLoading(false);
             }
           },
@@ -353,11 +353,11 @@ export function PdfViewer({ fileId, productId, version }) {
         if (cancelled) return;
         const status = err?.status ?? err?.response?.status;
         if (status === 403) {
-          setError("You haven't unlocked these notes.");
+          setError("You haven't unlocked this product.");
         } else if (status === undefined && !navigator.onLine) {
           setError("You appear to be offline. Please check your connection and try again.");
         } else {
-          setError("Could not load the notes. Please try again.");
+          setError("Could not load this file. Please try again.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -854,7 +854,7 @@ export function PdfViewer({ fileId, productId, version }) {
           </div>
           <div
             className="relative h-5 w-full overflow-hidden rounded-full bg-brand-100"
-            role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Loading notes"
+            role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Loading file"
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-[width] duration-500 ease-out"
@@ -890,7 +890,7 @@ export function PdfViewer({ fileId, productId, version }) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Subtle quality state: the note is readable immediately (compressed);
+          {/* Subtle quality state: the file is readable immediately (compressed);
               the original keeps loading behind it and upgrades pages in place. */}
           {hqStatus === "loading" && (
             <span
@@ -963,7 +963,7 @@ export function PdfViewer({ fileId, productId, version }) {
            clipping) and pannable on both axes once zoomed wider. */}
         {bookmarkedOnly && visiblePages.length === 0 ? (
           <div className="px-4 py-24 text-center text-sm text-ink-soft">
-            No bookmarked pages in this note yet. Tap the ★ on a page to save it.
+            No bookmarked pages in this file yet. Tap the ★ on a page to save it.
           </div>
         ) : (
           <div className="flex flex-col items-center" style={{ width: "max-content", minWidth: "100%" }}>

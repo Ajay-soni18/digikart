@@ -2,7 +2,7 @@
 Admin revenue & transactions analytics (IsAdminUser).
 
   GET /api/v1/admin/transactions/  — paginated transaction log with filters
-  GET /api/v1/admin/revenue/       — totals, time-series, and subject/unit/chapter
+  GET /api/v1/admin/revenue/       — totals, time-series, and category/item
                                       revenue breakdowns
 
 Both accept ?from=YYYY-MM-DD&to=YYYY-MM-DD; transactions also accept
@@ -24,7 +24,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.catalog.models import Bundle, Category, Product
+from apps.catalog.models import Bundle, Product
 
 from .models import Coupon, Order, OrderItem
 from .serializers import AdminCouponSerializer, AdminTransactionSerializer

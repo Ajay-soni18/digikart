@@ -4,7 +4,7 @@
 
 ```
                  ┌──────────────┐         ┌──────────────────┐
-  Students  ───▶ │  Frontend     │  HTTPS  │  Backend          │
+  Buyers    ───▶ │  Frontend     │  HTTPS  │  Backend          │
   (browser)      │  static + CDN │ ──────▶ │  Django + gunicorn│
                  │  (Vite build) │   API   │                   │
                  └──────┬───────┘         └───────┬───────────┘
@@ -130,7 +130,7 @@ SPA routing is handled by `client/public/_redirects` (`/* → /index.html`), whi
 1. Complete Razorpay KYC and switch to **Live** mode.
 2. Put the **live** key id + secret in the backend env, and the **public** key id in `VITE_RAZORPAY_KEY_ID`.
 3. The backend verifies every payment's signature before unlocking content (`/api/v1/payments/verify/`).
-4. **Set up the webhook** (already implemented): Dashboard → Settings → Webhooks → point it at `https://api.yourdomain.com/api/v1/payments/webhook/`, subscribe to `payment.captured` and `order.paid`, and set its signing secret as `RAZORPAY_WEBHOOK_SECRET` in the backend env. This fulfils the order even if the student closes the tab before the client `verify` callback runs. Fulfilment is **idempotent** (row-locked), so the webhook and the callback can't double-grant. Leaving `RAZORPAY_WEBHOOK_SECRET` blank disables the endpoint (it returns 404).
+4. **Set up the webhook** (already implemented): Dashboard → Settings → Webhooks → point it at `https://api.yourdomain.com/api/v1/payments/webhook/`, subscribe to `payment.captured` and `order.paid`, and set its signing secret as `RAZORPAY_WEBHOOK_SECRET` in the backend env. This fulfils the order even if the buyer closes the tab before the client `verify` callback runs. Fulfilment is **idempotent** (row-locked), so the webhook and the callback can't double-grant. Leaving `RAZORPAY_WEBHOOK_SECRET` blank disables the endpoint (it returns 404).
 
 ## Step 7 — DNS
 - `api.yourdomain.com` → backend service
@@ -152,10 +152,10 @@ SPA routing is handled by `client/public/_redirects` (`/* → /index.html`), whi
 ---
 
 ## Making PDF loading fast & smooth
-- **Bytes never touch Django (biggest win):** `GET /notes/<id>/signed-url/` only checks access and returns short-lived presigned URLs (60 s by default — `SIGNED_URL_EXPIRY_SECONDS`); the browser streams the file **directly from R2** over HTTP Range (current page first, the rest in the background). The backend bears no per-file CPU/RAM/bandwidth — so concurrency is bounded by R2, not the dyno. **This requires the bucket CORS rule from Step 3.**
+- **Bytes never touch Django (biggest win):** `GET /files/<id>/signed-url/` only checks access and returns short-lived presigned URLs (60 s by default — `SIGNED_URL_EXPIRY_SECONDS`); the browser streams the file **directly from R2** over HTTP Range (current page first, the rest in the background). The backend bears no per-file CPU/RAM/bandwidth — so concurrency is bounded by R2, not the dyno. **This requires the bucket CORS rule from Step 3.**
 - **Compressed-first, original-in-background:** every admin upload is stored as TWO renditions — the untouched original and an auto-compressed fast preview (images downsampled to reading DPI; typically ~10–15 % of the original for scans). The viewer opens the compressed copy almost immediately, then fetches the original with the same page-priority order and **upgrades each page in place** (page N replaces page N only — no reflow, no page jump). Tiny uploads skip the second copy; a compression failure just means the original alone is served.
 - **Browser cache for repeat opens:** the viewer assembles the streamed bytes and stores BOTH renditions in **IndexedDB**, keyed by `user + note + file version + quality`. Re-opening the same note on the same device is served from disk — **zero storage egress, zero signed-URL call** (a cached original wins outright; a cached compressed shows instantly while the original still upgrades) — and the cache is wiped on logout. Replacing a note's file bumps its `file_version`, which auto-invalidates the old cached copies.
-- **gunicorn threads:** student requests are light + I/O-bound (auth, sign URLs, small JSON); `--threads 4` lets one worker serve many concurrently. Since byte-streaming no longer lives in the worker, scaling `--workers` is memory-cheap (see `Procfile`).
+- **gunicorn threads:** buyer requests are light + I/O-bound (auth, sign URLs, small JSON); `--threads 4` lets one worker serve many concurrently. Since byte-streaming no longer lives in the worker, scaling `--workers` is memory-cheap (see `Procfile`).
 - **Frontend is already optimised:** routes are code-split and **pdf.js is lazy-loaded only on the notes route**, so first paint is fast and the heavy PDF engine downloads only when a note is opened.
 - **CDN:** the frontend is served from the static host's CDN. Note PDFs are private + per-user-signed so they can't be CDN-cached, but the compressed-first flow + per-device IndexedDB cache cover fast first and repeat views.
 

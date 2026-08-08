@@ -6,7 +6,7 @@ export default function Announcements() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Announcements</h1>
-        <p className="text-sm text-ink-soft">Banners shown to students (new notes, discounts, updates).</p>
+        <p className="text-sm text-ink-soft">Banners shown to buyers (new products, discounts, updates).</p>
       </div>
       <CrudPanel
         title="Announcements"

@@ -10,7 +10,7 @@ password (createsuperuser) for Django's own admin; flip `is_staff=True` on a
 Google-created user to give it access to the React admin dashboard.
 
 `first_name` / `last_name` come from the Google profile (given/family name) and,
-together with the email, are what the per-note watermark displays.
+together with the email, are what the per-file watermark displays.
 """
 
 import uuid
@@ -59,13 +59,13 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """A registered student or staff member. Email is the unique login id."""
+    """A registered buyer or staff member. Email is the unique login id."""
 
     email = models.EmailField("email address", unique=True)
     full_name = models.CharField("full name", max_length=150, blank=True)
 
     # Google profile names. `first_name` + `last_name` + `email` are what the
-    # per-note watermark shows (drawn client-side on each page). Either name may
+    # per-file watermark shows (drawn client-side on each page). Either name may
     # be blank if Google didn't provide it — the watermark degrades gracefully.
     first_name = models.CharField("first name", max_length=150, blank=True, default="")
     last_name = models.CharField("last name", max_length=150, blank=True, default="")
@@ -128,9 +128,8 @@ class Profile(models.Model):
     """Optional extra buyer details. Kept separate so the core User stays lean
     and we can grow buyer-facing fields without touching auth.
 
-    Deliberately domain-neutral: this used to carry MBBS year choices, which
-    only made sense while the catalog was a medical curriculum. `headline` is
-    free text so it fits a student, a photographer or anyone else.
+    Deliberately domain-neutral — free text, so it fits a student, a
+    photographer, or anyone else.
     """
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
@@ -138,7 +137,7 @@ class Profile(models.Model):
         max_length=200, blank=True, help_text="College, studio, company — whatever fits.",
     )
     headline = models.CharField(
-        max_length=200, blank=True, help_text='Free text, e.g. "2nd year medical student".',
+        max_length=200, blank=True, help_text='Free text, e.g. "Wedding photographer".',
     )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
     bio = models.TextField(blank=True)

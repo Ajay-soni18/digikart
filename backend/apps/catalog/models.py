@@ -33,7 +33,7 @@ from django.utils.text import slugify
 
 def _unique_slug(instance, base_value, *, scope=None):
     """Generate a slug unique within the model (optionally within a scope filter).
-    Appends -2, -3, … on collision. Mirrors the helper in apps/content/models.py."""
+    Appends -2, -3, … on collision."""
     model = instance.__class__
     base = slugify(base_value) or "item"
     slug = base
@@ -127,12 +127,12 @@ class Category(TimeStamped):
 
     @property
     def path(self):
-        """Human-readable breadcrumb, e.g. "MBBS · 2nd Year · Pathology"."""
+        """Human-readable breadcrumb, e.g. "Creative Assets · Photography"."""
         return " · ".join([c.name for c in self.ancestors] + [self.name])
 
 
 class Product(TimeStamped):
-    """The sellable unit — what used to be a Note.
+    """The sellable unit: one listing a buyer can own.
 
     `youtube_url` is an optional free, public hook shown to everyone (it can't be
     access-gated, so it never is). The paid payload is the attached ProductFiles.
@@ -227,7 +227,6 @@ class ProductFile(TimeStamped):
         max_length=12, choices=Delivery.choices, default=Delivery.DOWNLOAD,
     )
     file_type = models.CharField(max_length=10, choices=FileType.choices, default=FileType.PDF)
-    mime_type = models.CharField(max_length=120, blank=True, default="")
 
     original_key = models.CharField(
         max_length=500, blank=True, default="",

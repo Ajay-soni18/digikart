@@ -1,28 +1,28 @@
 /*
- * Local (IndexedDB) cache for note PDFs.
+ * Local (IndexedDB) cache for file PDFs.
  *
- * Why: the viewer fetches a note's bytes DIRECTLY from object storage
+ * Why: the viewer fetches a file's bytes DIRECTLY from object storage
  * (Cloudflare R2) on every open — and it background-prefetches every page (see
- * notesSource.js / PdfViewer.jsx), so each first open pulls roughly the whole
+ * fileSource.js / PdfViewer.jsx), so each first open pulls roughly the whole
  * file from storage. Caching the assembled file locally means a repeat open of
- * the SAME note on the SAME device serves from IndexedDB with ZERO storage
+ * the SAME file on the SAME device serves from IndexedDB with ZERO storage
  * bandwidth (and works even offline once warmed).
  *
- * Every note has up to TWO cached renditions, stored as separate entries:
+ * Every file has up to TWO cached renditions, stored as separate entries:
  *   - "compressed": the small fast-preview PDF (opens instantly next time)
  *   - "original":   the untouched upload (full quality, replaces pages live)
  *
  * Cache key = userId + fileId + version + quality:
- *   - userId   → one account can't read another's cached (locked) notes.
+ *   - userId   → one account can't read another's cached (locked) files.
  *   - fileId   → obvious.
- *   - version  → the note's `file_version`: a re-uploaded file gets a new
+ *   - version  → the file's `file_version`: a re-uploaded file gets a new
  *                version, so every old entry becomes a MISS automatically and
  *                stale versions are pruned on the next write.
  *   - quality  → "compressed" / "original" cached independently; an original
  *                hit is preferred and skips the network entirely.
  *
- * On logout we wipe the whole store (clearNotesCache) so a different account on
- * a shared device can't open the previous user's locally cached locked notes.
+ * On logout we wipe the whole store (clearFileCache) so a different account on
+ * a shared device can't open the previous user's locally cached locked files.
  *
  * Everything here is BEST-EFFORT. If IndexedDB is unavailable (private mode,
  * disabled, quota exhausted) every call fails soft and the caller falls back to
@@ -31,14 +31,14 @@
  */
 
 const DB_NAME = "digikart-files-cache";
-const STORE = "notes";
+const STORE = "files";
 // v2: keys gained the quality dimension (dual renditions). The upgrade handler
 // recreates the store, dropping v1 entries — they'd never be hit again anyway,
 // so this just reclaims the user's disk space.
 const DB_VERSION = 2;
 
 // Bound the cache so it can't grow without limit on a shared / low-end device.
-// A note can occupy two entries (compressed + original); originals are tens of
+// A file can occupy two entries (compressed + original); originals are tens of
 // MB, so a few dozen entries is already plenty. Past the cap we evict the
 // oldest-cached entries first. The browser's own storage quota is the real
 // ceiling — a QuotaExceededError on write triggers eviction + retry below.
@@ -59,7 +59,7 @@ function openDB() {
       // Key format changed in v2 → start clean (see DB_VERSION comment).
       if (db.objectStoreNames.contains(STORE)) db.deleteObjectStore(STORE);
       const store = db.createObjectStore(STORE, { keyPath: "key" });
-      store.createIndex("noteScope", "noteScope", { unique: false }); // prune old versions
+      store.createIndex("fileScope", "fileScope", { unique: false }); // prune old versions
       store.createIndex("cachedAt", "cachedAt", { unique: false }); // oldest-first eviction
     };
     req.onsuccess = () => resolve(req.result);
@@ -105,7 +105,7 @@ export async function getCachedFile({ userId, fileId, version, quality }) {
 
 /**
  * Store one rendition's complete bytes. Drops cached entries of OTHER versions
- * of the same note first (both qualities of the current version may coexist),
+ * of the same file first (both qualities of the current version may coexist),
  * then enforces the entry cap. Silent on failure (the next open just re-fetches
  * from storage).
  */
@@ -119,7 +119,7 @@ export async function putCachedFile({ userId, fileId, version, quality }, bytes)
   }
   const record = {
     key: cacheKey(userId, fileId, version, quality),
-    noteScope: scopeKey(userId, fileId),
+    fileScope: scopeKey(userId, fileId),
     userId,
     fileId,
     version,
@@ -130,7 +130,7 @@ export async function putCachedFile({ userId, fileId, version, quality }, bytes)
     blob: new Blob([bytes], { type: "application/pdf" }),
   };
   try {
-    await pruneOtherVersions(db, record.noteScope, version);
+    await pruneOtherVersions(db, record.fileScope, version);
     await enforceEntryCap(db);
     await putWithEviction(db, record);
   } catch {
@@ -139,10 +139,10 @@ export async function putCachedFile({ userId, fileId, version, quality }, bytes)
 }
 
 /**
- * Clear EVERY cached note/PDF. Called on logout / session end. Only ever clears
+ * Clear EVERY cached file/PDF. Called on logout / session end. Only ever clears
  * our own object store; no other browser data is touched.
  */
-export async function clearNotesCache() {
+export async function clearFileCache() {
   try {
     const db = await openDB();
     await asPromise(store(db, "readwrite").clear());
@@ -151,14 +151,14 @@ export async function clearNotesCache() {
   }
 }
 
-/* Remove every cached entry of a note that belongs to a DIFFERENT version than
+/* Remove every cached entry of a file that belongs to a DIFFERENT version than
    the one being written — the compressed and original entries of the CURRENT
    version stay. Uses a key cursor so the (large) blob values are never loaded;
    the version is parsed from the primary key (userId::fileId::version::quality). */
-function pruneOtherVersions(db, noteScope, keepVersion) {
+function pruneOtherVersions(db, fileScope, keepVersion) {
   const os = store(db, "readwrite");
   return new Promise((resolve, reject) => {
-    const cur = os.index("noteScope").openKeyCursor(IDBKeyRange.only(noteScope));
+    const cur = os.index("fileScope").openKeyCursor(IDBKeyRange.only(fileScope));
     cur.onsuccess = () => {
       const c = cur.result;
       if (!c) return resolve();

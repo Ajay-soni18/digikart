@@ -1,5 +1,5 @@
-"""Engagement endpoints: announcements, contact form, bookmarks, progress, and
-admin inbox/announcement CRUD."""
+"""Engagement endpoints: announcements, contact form, bookmarks, and admin
+inbox/announcement CRUD."""
 
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404
@@ -10,13 +10,12 @@ from rest_framework.views import APIView
 
 from apps.catalog.models import Product
 
-from .models import Announcement, Bookmark, ContactMessage, Progress
+from .models import Announcement, Bookmark, ContactMessage
 from .serializers import (
     AdminAnnouncementSerializer,
     AdminContactMessageSerializer,
     AnnouncementSerializer,
     ContactMessageSerializer,
-    ProgressMarkSerializer,
 )
 
 # Bookmarkable types. The flat catalog has one addressable thing, so this is a
@@ -92,37 +91,6 @@ class BookmarkToggleView(APIView):
             return Response({"bookmarked": False})
         Bookmark.objects.create(user=request.user, content_type=ct, object_id=obj.id, page=page)
         return Response({"bookmarked": True})
-
-
-# --- Progress (auth) ------------------------------------------------------
-class ProgressView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        completed = list(
-            request.user.progress.filter(completed=True).values_list("product_id", flat=True)
-        )
-        return Response({"completed_product_ids": completed})
-
-
-class ProgressMarkView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, product_id):
-        # Published products only — an unpublished/draft id is not addressable.
-        product = get_object_or_404(Product, pk=product_id, is_published=True)
-        s = ProgressMarkSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        completed = s.validated_data["completed"]
-        if completed:
-            Progress.objects.update_or_create(
-                user=request.user, product=product, defaults={"completed": True},
-            )
-        else:
-            # Incomplete == no progress: drop the row rather than keep a dead
-            # completed=False record (nothing reads it).
-            Progress.objects.filter(user=request.user, product=product).delete()
-        return Response({"product_id": product.id, "completed": completed})
 
 
 # --- Admin ----------------------------------------------------------------

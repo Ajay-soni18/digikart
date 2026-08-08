@@ -18,7 +18,7 @@ import {
 // Fixed footer copy (not admin-editable). Update it here if it changes.
 const OWNER = "Digikart";
 const TAGLINE =
-  "A digital product mart — notes, files, videos, links and bundles, delivered instantly.";
+  "A digital product mart — files, guides, presets and bundles, delivered instantly.";
 
 // Social channel links are fixed (not admin-editable). Update a URL here if a
 // channel ever moves.

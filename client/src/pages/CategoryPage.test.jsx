@@ -95,7 +95,7 @@ describe("CategoryPage", () => {
     renderPage();
     await screen.findByText("Everything");
     fireEvent.click(screen.getByRole("button", { name: /add bundle/i }));
-    // The sellable product's Add button is replaced by the covered note.
+    // The sellable product's Add button is replaced by the covered label.
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /add$/i })).not.toBeInTheDocument()
     );

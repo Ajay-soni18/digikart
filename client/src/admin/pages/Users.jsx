@@ -74,7 +74,7 @@ export default function Users() {
                     {u.is_staff ? (
                       <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-700 dark:text-brand-300">Admin</span>
                     ) : (
-                      <span className="text-ink-soft">Student</span>
+                      <span className="text-ink-soft">Buyer</span>
                     )}
                   </td>
                 </tr>
@@ -82,7 +82,7 @@ export default function Users() {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-ink-soft">
-                    No students found.
+                    No buyers found.
                   </td>
                 </tr>
               )}

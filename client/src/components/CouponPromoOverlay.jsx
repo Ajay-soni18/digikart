@@ -1,10 +1,10 @@
 /*
- * Coupon promo overlay — the animated "welcome gift" that greets a student on
+ * Coupon promo overlay — the animated "welcome gift" that greets a buyer on
  * their dashboard and hands them the HAPPYLEARNING50 code.
  *
  * Behaviour:
  *   • Shows on the DASHBOARD only, and only to a signed-in user — it's a nudge
- *     for people who can actually buy notes, not a splash on the marketing page.
+ *     for people who can actually buy something, not a splash on the marketing page.
  *     Anywhere else (landing, auth, catalog, admin) it renders nothing.
  *   • Waits for the auth bootstrap to resolve before deciding, so a page refresh
  *     on /dashboard doesn't skip it while the session is still being verified.
@@ -308,7 +308,7 @@ export function CouponPromoOverlay() {
             style={delay(0.35)}
             className="animate-promo-rise mt-3.5 text-[1.375rem] font-extrabold leading-tight tracking-tight text-ink sm:mt-4 sm:text-[1.75rem]"
           >
-            A head start on your notes
+            A head start on your first purchase
           </h2>
           <p
             style={delay(0.45)}

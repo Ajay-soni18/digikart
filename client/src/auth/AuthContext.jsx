@@ -10,7 +10,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, setAuthFailureHandler, tokenStore } from "../lib/api";
-import { clearNotesCache } from "../lib/notesCache";
+import { clearFileCache } from "../lib/fileCache";
 
 const AuthContext = createContext(null);
 
@@ -21,19 +21,19 @@ export function AuthProvider({ children }) {
   const clearSession = useCallback(() => {
     tokenStore.clear();
     setUser(null);
-    // Wipe locally cached notes/PDFs whenever the session ends, so a different
-    // account on this device can't open the previous user's locked notes from
-    // the local cache. Best-effort and scoped to OUR notes store only — it never
+    // Wipe locally cached files whenever the session ends, so a different
+    // account on this device can't open the previous user's paid files from
+    // the local cache. Best-effort and scoped to OUR file store only — it never
     // touches tokens, theme, reading positions, or any other site's data.
-    clearNotesCache().catch(() => {});
+    clearFileCache().catch(() => {});
   }, []);
 
   // If a token refresh ultimately fails, drop the session (this is a logout too,
-  // so the cached notes are cleared for the same reason).
+  // so the cached files are cleared for the same reason).
   useEffect(() => {
     setAuthFailureHandler(() => {
       setUser(null);
-      clearNotesCache().catch(() => {});
+      clearFileCache().catch(() => {});
     });
   }, []);
 

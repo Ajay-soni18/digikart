@@ -7,8 +7,7 @@ export const paymentApi = {
   createOrder: (items, coupon) =>
     api.post("/payments/create-order/", { items, coupon }).then((r) => r.data),
   verify: (payload) => api.post("/payments/verify/", payload).then((r) => r.data),
-  // Best-effort release of a coupon slot when the student abandons checkout.
+  // Best-effort release of a coupon slot when the buyer abandons checkout.
   cancelOrder: (orderDbId) =>
     api.post("/payments/cancel-order/", { order_db_id: orderDbId }).then((r) => r.data),
-  myPurchases: () => api.get("/payments/my-purchases/").then((r) => r.data),
 };

@@ -90,19 +90,3 @@ class Bookmark(models.Model):
 
     def __str__(self):
         return f"{self.user.email} ★ {self.content_object}"
-
-
-class Progress(models.Model):
-    """Tracks whether a user has marked a product complete (+ last touched)."""
-
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progress")
-    product = models.ForeignKey("catalog.Product", on_delete=models.CASCADE, related_name="progress")
-    completed = models.BooleanField(default=False)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-updated_at"]
-        unique_together = [("user", "product")]
-
-    def __str__(self):
-        return f"{self.user.email} · {self.product} · {'done' if self.completed else 'in progress'}"

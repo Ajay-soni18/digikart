@@ -2,7 +2,7 @@
  * Reusable inline alert for error / warning / success / info messages.
  *
  * Consolidates the red message box that was previously copy-pasted across the
- * auth, dashboard, notes, contact and admin screens, so every error reads the
+ * auth, dashboard, catalog, contact and admin screens, so every error reads the
  * same and there's a single place to evolve the styling. Renders nothing when
  * there's no message, so callers can write `<Alert>{error}</Alert>` directly.
  */

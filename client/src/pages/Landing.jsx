@@ -18,23 +18,23 @@ import { useAuth } from "../auth/AuthContext";
 const HERO = {
   title: "The Digital Product Mart",
   subtitle:
-    "Browse and buy digital products — notes, files, videos, links and bundles — delivered the moment you pay.",
+    "Browse and buy digital products — files, guides, presets and bundles — delivered the moment you pay.",
   byline: "Digikart",
 };
 
 // The three feature cards under the hero. Fixed content (not admin-editable).
 const HIGHLIGHTS = [
   {
-    title: "Chapter-wise lectures",
-    desc: "Comprehensive video lectures organized systematically by unit.",
+    title: "Buy once, keep it",
+    desc: "Your purchases stay in your library, and anything added to a bundle you own arrives automatically.",
   },
   {
-    title: "Complete notes",
-    desc: "Premium, visually optimized and high-yield notes you can read anywhere.",
+    title: "Any kind of file",
+    desc: "PDFs, archives, audio, images — delivered straight from secure storage the moment you pay.",
   },
   {
-    title: "Built for MBBS",
-    desc: "Tailored around CBME curriculum for university exams.",
+    title: "Protected reading",
+    desc: "Paid documents open in a watermarked viewer, so what you buy stays yours.",
   },
 ];
 
@@ -75,7 +75,7 @@ export default function Landing() {
       {/* Centered hero */}
       <main className="mx-auto flex max-w-3xl flex-col items-center px-6 pt-10 pb-20 text-center sm:pt-16">
         <span className="mb-6 inline-flex items-center gap-2 rounded-full bg-surface/70 px-4 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 shadow-card ring-1 ring-brand-100">
-          🧬 Premium MBBS Library
+          ✨ The Digital Product Mart
         </span>
 
         <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-ink sm:text-6xl">

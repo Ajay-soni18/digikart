@@ -98,7 +98,7 @@ describe("CouponPromoOverlay", () => {
   });
 
   it("shows on the dashboard route only", () => {
-    for (const path of ["/", "/login", "/signup", "/contact", "/admin", "/subjects/anatomy"]) {
+    for (const path of ["/", "/login", "/signup", "/contact", "/admin", "/c/photography"]) {
       const { unmount } = renderOverlay(path);
       openIt();
       expect(screen.queryByRole("dialog")).toBeNull();

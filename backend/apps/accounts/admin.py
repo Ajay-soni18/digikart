@@ -1,6 +1,6 @@
 """
 Django admin for accounts. This is a low-level dev/ops tool (createsuperuser,
-flipping is_staff on a Google account, debugging). The student-facing product
+flipping is_staff on a Google account, debugging). The buyer-facing product
 admin is the custom React dashboard.
 """
 

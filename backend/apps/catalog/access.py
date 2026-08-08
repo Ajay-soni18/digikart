@@ -20,7 +20,7 @@ def product_unlocked(user, product):
     """Return True if `user` may open `product`'s files.
 
     Authentication is required first — even a free product is gated behind
-    having an account, matching the old behaviour for free notes.
+    having an account.
     """
     if not user or not getattr(user, "is_authenticated", False):
         return False

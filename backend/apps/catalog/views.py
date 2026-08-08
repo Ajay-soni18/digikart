@@ -114,20 +114,6 @@ class ProductDetailView(APIView):
         return Response(data)
 
 
-class BundleDetailView(APIView):
-    """One bundle: what it contains and what it costs."""
-
-    permission_classes = [AllowAny]
-
-    def get(self, request, slug):
-        bundle = get_object_or_404(Bundle, slug=slug, is_published=True)
-        context = {"request": request, **_ownership_context(request)}
-        products = bundle.member_products().filter(is_published=True)
-        data = BundleCardSerializer(bundle, context=context).data
-        data["products"] = ProductCardSerializer(products, many=True, context=context).data
-        return Response(data)
-
-
 class SearchView(APIView):
     """Cross-catalog search over categories, products and bundles."""
 

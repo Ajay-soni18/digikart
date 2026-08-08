@@ -1,11 +1,11 @@
 /*
- * Checkout confirmation modal: shown before Razorpay opens so the student can
+ * Checkout confirmation modal: shown before Razorpay opens so the buyer can
  * review the line items, apply/remove a coupon, and see the original price,
  * discount and final payable amount — all priced by the backend (never the
  * client). Pressing Pay hands off to `startCheckout` (Razorpay, or a free-order
  * completion when a coupon zeroes the total).
  *
- * Open it by passing a non-empty `items` array (e.g. [{ type: "chapter", id }]);
+ * Open it by passing a non-empty `items` array (e.g. [{ type: "bundle", id }]);
  * pass `null` to keep it closed.
  */
 import { useEffect, useState } from "react";

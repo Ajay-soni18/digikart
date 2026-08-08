@@ -7,7 +7,7 @@ after the new ones are safely in place.
 """
 
 from django.db import transaction
-from rest_framework import status, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser

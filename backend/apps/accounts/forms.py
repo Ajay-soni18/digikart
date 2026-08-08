@@ -1,7 +1,6 @@
 """Admin forms for the custom User model (the stock auth forms assume a
 `username` field, which we don't have)."""
 
-from django import forms
 from django.contrib.auth.forms import BaseUserCreationForm
 from django.contrib.auth.forms import UserChangeForm as BaseUserChangeForm
 

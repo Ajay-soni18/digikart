@@ -14,12 +14,12 @@ How the app uses the bucket, so the setup below makes sense:
   notes/{note_id}/{file_version}/original.pdf
   notes/{note_id}/{file_version}/compressed.pdf
   ```
-- A student's viewer calls `GET /api/v1/notes/<id>/signed-url/`; Django checks
+- A buyer's viewer calls `GET /api/v1/files/<id>/signed-url/`; Django checks
   access and returns **short-lived presigned URLs** (60 s) for both renditions.
   The browser fetches the bytes **directly from R2** with HTTP Range requests —
   compressed first (instant open), original upgrading each page in the
   background. Django never proxies file bytes.
-- Subject/lecture thumbnails also live in the bucket and are served the same
+- Category/product thumbnails also live in the bucket and are served the same
   presigned way.
 
 ---
@@ -42,7 +42,7 @@ How the app uses the bucket, so the setup below makes sense:
    - **Name**: e.g. `digikart-files` (lowercase; this becomes
      `CLOUDFLARE_R2_BUCKET_NAME`).
    - **Location**: leave **Automatic**, hint **Asia-Pacific (APAC)** if offered
-     — closest to your students.
+     — closest to your buyers.
    - **Storage class**: Standard.
 4. While you're on the R2 **Overview** page, copy your **Account ID** (a
    32-character hex string shown on the right side; it's also in the dashboard
@@ -69,7 +69,7 @@ signature gets `401/403`.
 2. Configure:
    - **Token name**: `digikart-django`.
    - **Permissions**: **Object Read & Write** — the app uploads (admin),
-     reads/presigns (students), and deletes (note replace/delete). Do **not**
+     reads/presigns (buyers), and deletes (file replace/delete). Do **not**
      pick Admin variants; object-level is enough.
    - **Specify bucket(s)**: scope it to **only** your bucket (e.g.
      `digikart-files`) — least privilege.
@@ -162,7 +162,7 @@ in front of the bucket:
   without the backend's access check.
 - Cloudflare's CDN cannot cache responses to presigned `r2.cloudflarestorage.com`
   URLs anyway, and R2 egress is already free, so a CDN adds no cost win.
-- Speed for students comes from: the compressed-first rendition, page-priority
+- Speed for buyers comes from: the compressed-first rendition, page-priority
   Range fetching, and the browser's IndexedDB cache (repeat opens are free and
   offline-capable).
 
@@ -175,7 +175,7 @@ change. Don't attach a domain to the private notes bucket.)
 
 1. Deploy the backend with the env vars above (the release step runs the
    migration that adds the new note fields automatically).
-2. Log into the React admin (`/admin`) → Content → drill into a chapter →
+2. Log into the React admin (`/admin`) → Catalog → drill into a category →
    **Upload note** → pick a real PDF (try a big scanned one) → Save. The
    request takes longer than before — the server is compressing and uploading
    two files. Keep the **Published** toggle on.
@@ -189,16 +189,16 @@ change. Don't attach a domain to the private notes bucket.)
    non-PDF file — both must be rejected with a clear message under the file
    field, and nothing should appear in the bucket.
 
-## 10. Test the signed-URL fetch (student flow)
+## 10. Test the signed-URL fetch (buyer flow)
 
-1. As a logged-in student with access (or the admin), open the note in the
+1. As a logged-in buyer with access (or the admin), open the file in the
    site. Expected behaviour: the loader fills fast, the note appears
    (compressed quality), a subtle **“Loading HD…”** appears in the toolbar and
    pages sharpen in place — current page first — with no page jump, and the
    watermark/zoom/bookmarks behave exactly as before. Repeat opens on the same
    device are instant (IndexedDB).
 2. API-level check (optional): with a logged-in session token,
-   `GET https://<api>/api/v1/notes/<id>/signed-url/` returns
+   `GET https://<api>/api/v1/files/<id>/signed-url/` returns
    ```json
    {
      "version": "20260612...-ab12cd34",
@@ -220,10 +220,10 @@ change. Don't attach a domain to the private notes bucket.)
 - **Code**: `git grep -i backblaze` and `git grep AWS_` in the repo return
   nothing — the integration was removed (storage now configures only from
   `CLOUDFLARE_R2_*`).
-- **Runtime**: with DevTools open, browse subjects + open several notes — every
+- **Runtime**: with DevTools open, browse categories + open several files — every
   media/PDF request hits `*.r2.cloudflarestorage.com`. Remove the old `AWS_*`
   env vars from Render so no credential for B2 even exists in the environment.
-- **Money**: after students have switched over, the B2 dashboard should show
+- **Money**: after buyers have switched over, the B2 dashboard should show
   zero download activity; nothing in the app writes there anymore.
 
 ### Existing notes that still live in Backblaze

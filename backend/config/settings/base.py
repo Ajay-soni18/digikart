@@ -288,9 +288,3 @@ RAZORPAY_WEBHOOK_SECRET = env("RAZORPAY_WEBHOOK_SECRET", default="")
 # checkout, short enough that an abandoned cart doesn't tie up a limited coupon.
 COUPON_RESERVATION_TTL_MINUTES = env.int("COUPON_RESERVATION_TTL_MINUTES", default=30)
 
-# ---------------------------------------------------------------------------
-# YouTube Data API v3 — powers the admin "Import from YouTube playlist" feature
-# (apps/content/youtube.py). Leave blank to disable playlist import; manually
-# adding a single lecture works without it.
-# ---------------------------------------------------------------------------
-YOUTUBE_API_KEY = env("YOUTUBE_API_KEY", default="")

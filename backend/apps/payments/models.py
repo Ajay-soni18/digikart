@@ -1,10 +1,10 @@
 """
 Payments & entitlements.
 
-A student fills a cart with any mix of Chapters / Units / a whole Subject, pays
+A buyer fills a cart with any mix of Products and Bundles, pays
 once via Razorpay, and — after the backend verifies the payment signature — we
 grant one `Entitlement` per purchased item. Access is hierarchical: owning a
-Subject or Unit unlocks all chapters beneath it (see access checks in
+a Bundle unlocks everything inside it (see access checks in
 `entitlements.py`).
 
 Prices are ALWAYS computed server-side (see `pricing.py`); the client's price is
@@ -126,7 +126,7 @@ class Order(models.Model):
 
 class OrderItem(models.Model):
     """A purchasable line in an order, recorded so entitlements can be granted
-    after the payment is verified. Points at a Subject / Unit / Chapter."""
+    after the payment is verified. Points at a Product or Bundle."""
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
@@ -140,7 +140,7 @@ class OrderItem(models.Model):
 
 
 class Entitlement(models.Model):
-    """An active access grant a user holds for a Subject / Unit / Chapter."""
+    """An active access grant a user holds for a Product or Bundle."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="entitlements")
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)

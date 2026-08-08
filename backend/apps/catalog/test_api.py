@@ -4,22 +4,22 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Bundle, BundleItem, Category, Product, ProductFile
-from .testing import add_member, bundle, category, product, product_file
+from .models import BundleItem, Category, Product
+from .testing import bundle, category, product, product_file
 
 User = get_user_model()
 
 
 class PublicBrowsingTests(TestCase):
     def setUp(self):
-        self.root = category("Medicine")
-        self.child = category("Pathology", parent=self.root)
+        self.root = category("Creative Assets")
+        self.child = category("Photography", parent=self.root)
         self.hidden = category("Draft area", parent=self.root, is_published=False)
-        self.paid = product(self.child, "Cell Injury", "49.00")
+        self.paid = product(self.child, "Moody Pack", "49.00")
         self.free = product(self.child, "Preview", is_free=True)
         self.draft = product(self.child, "Unfinished", "10.00", published=False)
         self.file = product_file(self.paid)
-        self.bundle = bundle("Pathology Complete", self.paid, price="99.00", category=self.child)
+        self.bundle = bundle("Photography Complete", self.paid, price="99.00", category=self.child)
         self.client = APIClient()
 
     def test_tree_is_public_and_hides_unpublished_nodes(self):
@@ -27,15 +27,15 @@ class PublicBrowsingTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.data), 1)
         names = {c["name"] for c in res.data[0]["children"]}
-        self.assertIn("Pathology", names)
+        self.assertIn("Photography", names)
         self.assertNotIn("Draft area", names)
 
     def test_category_detail_lists_products_bundles_and_breadcrumb(self):
         res = self.client.get(f"/api/v1/categories/{self.child.slug}/")
         self.assertEqual(res.status_code, 200)
-        self.assertEqual([c["name"] for c in res.data["breadcrumb"]], ["Medicine"])
+        self.assertEqual([c["name"] for c in res.data["breadcrumb"]], ["Creative Assets"])
         titles = {p["title"] for p in res.data["products"]}
-        self.assertEqual(titles, {"Cell Injury", "Preview"})  # draft excluded
+        self.assertEqual(titles, {"Moody Pack", "Preview"})  # draft excluded
         self.assertEqual(len(res.data["bundles"]), 1)
 
     def test_unpublished_category_is_404(self):
@@ -52,7 +52,7 @@ class PublicBrowsingTests(TestCase):
 
     def test_product_detail_lists_the_bundles_containing_it(self):
         res = self.client.get(f"/api/v1/products/{self.paid.slug}/")
-        self.assertEqual([b["title"] for b in res.data["in_bundles"]], ["Pathology Complete"])
+        self.assertEqual([b["title"] for b in res.data["in_bundles"]], ["Photography Complete"])
 
     def test_draft_product_is_404(self):
         self.assertEqual(
@@ -68,14 +68,8 @@ class PublicBrowsingTests(TestCase):
         res = signed_in.get(f"/api/v1/products/{self.free.slug}/")
         self.assertTrue(res.data["unlocked"])
 
-    def test_bundle_detail_lists_members(self):
-        res = self.client.get(f"/api/v1/bundles/{self.bundle.slug}/")
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(str(res.data["price"]), "99.00")
-        self.assertEqual([p["title"] for p in res.data["products"]], ["Cell Injury"])
-
     def test_search_spans_categories_products_and_bundles(self):
-        res = self.client.get("/api/v1/search/?q=Patho")
+        res = self.client.get("/api/v1/search/?q=Photo")
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.data["categories"])
         self.assertTrue(res.data["bundles"])

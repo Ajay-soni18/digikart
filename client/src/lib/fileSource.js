@@ -7,7 +7,7 @@
  *   - original:   the untouched upload — replaces pages in the background
  *
  * Resolution order for a source:
- *   1. Local IndexedDB cache (see notesCache.js): a cached, non-stale copy is
+ *   1. Local IndexedDB cache (see fileCache.js): a cached, non-stale copy is
  *      served straight from disk — no signed-URL call, no storage fetch. A
  *      cached ORIGINAL always wins (it's the best quality we can show).
  *   2. Otherwise Django authorizes the request and hands back short-lived
@@ -28,7 +28,7 @@
  */
 import * as pdfjsLib from "pdfjs-dist/build/pdf";
 import { api } from "./api";
-import { getCachedFile, putCachedFile } from "./notesCache";
+import { getCachedFile, putCachedFile } from "./fileCache";
 
 async function fetchSignedUrls(fileId) {
   const { data } = await api.get(`/files/${fileId}/signed-url/`);
@@ -72,7 +72,7 @@ function recordChunk(assembly, begin, chunk, total, key) {
 }
 
 /**
- * Resolve a note into a pdf.js source at the requested quality.
+ * Resolve a file into a pdf.js source at the requested quality.
  *
  * @param {"auto"|"original"} [opts.quality]
  *   "auto" (the PRIMARY document): best cached rendition, else compressed from
@@ -106,7 +106,7 @@ export async function createFileSource(
 
   // 2) Miss / stale → authorize + sign, then fetch the bytes directly from storage.
   let current = await fetchSignedUrls(fileId);
-  // Some notes have no compressed rendition (tiny files, legacy rows,
+  // Some files have no compressed rendition (tiny files, legacy rows,
   // compression skipped) — then the primary source IS the original.
   const resolved = quality === "original" || !current.compressedUrl ? "original" : "compressed";
   const pickUrl = (urls) => (resolved === "original" ? urls.originalUrl : urls.compressedUrl);
@@ -166,7 +166,7 @@ export async function createFileSource(
         res = await once(pickUrl(current));
       }
       if (res.status !== 206 && res.status !== 200) {
-        throw new Error(`note range ${begin}-${end} failed: ${res.status}`);
+        throw new Error(`file range ${begin}-${end} failed: ${res.status}`);
       }
       const chunk = new Uint8Array(await res.arrayBuffer());
       // Copy into the assembly buffer BEFORE handing the chunk to pdf.js — pdf.js
@@ -177,7 +177,7 @@ export async function createFileSource(
       if (err?.name === "AbortError") return; // viewer moved on / unmounted
       // A range we can't deliver means pdf.js will wait forever for these bytes.
       // Log the technical reason and tell the caller so it can react.
-      console.error("Note range fetch failed:", err);
+      console.error("File range fetch failed:", err);
       onFatal?.(err);
     });
   };

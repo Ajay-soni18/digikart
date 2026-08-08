@@ -1,4 +1,4 @@
-/* Announcements, contact form, bookmarks, progress. */
+/* Announcements, contact form, bookmarks. */
 import { api } from "./api";
 
 export const engagementApi = {
@@ -8,7 +8,4 @@ export const engagementApi = {
   // `page` pins a bookmark to one page of a paginated product; omit it otherwise.
   toggleBookmark: (type, id, page) =>
     api.post("/bookmarks/toggle/", { type, id, page }).then((r) => r.data),
-  progress: () => api.get("/progress/").then((r) => r.data),
-  markProduct: (id, completed) =>
-    api.post(`/progress/product/${id}/`, { completed }).then((r) => r.data),
 };

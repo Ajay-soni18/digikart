@@ -28,11 +28,6 @@ class EngagementContentGuardTests(TestCase):
             {"type": "product", "id": product_id, "page": page}, format="json",
         )
 
-    def _mark(self, product_id):
-        return self.client.post(
-            f"/api/v1/progress/product/{product_id}/", {"completed": True}, format="json"
-        )
-
     def test_bookmark_published_product_ok(self):
         res = self._toggle(self.published.id)
         self.assertEqual(res.status_code, 200)
@@ -40,12 +35,6 @@ class EngagementContentGuardTests(TestCase):
 
     def test_bookmark_unpublished_product_is_not_addressable(self):
         self.assertEqual(self._toggle(self.draft.id).status_code, 404)
-
-    def test_progress_published_product_ok(self):
-        self.assertEqual(self._mark(self.published.id).status_code, 200)
-
-    def test_progress_unpublished_product_is_not_addressable(self):
-        self.assertEqual(self._mark(self.draft.id).status_code, 404)
 
     def test_bookmark_toggles_off_on_second_call(self):
         self._toggle(self.published.id)
@@ -58,7 +47,3 @@ class EngagementContentGuardTests(TestCase):
         )
         self.assertEqual(res.status_code, 400)
 
-    def test_progress_list_returns_completed_product_ids(self):
-        self._mark(self.published.id)
-        res = self.client.get("/api/v1/progress/")
-        self.assertEqual(res.data["completed_product_ids"], [self.published.id])

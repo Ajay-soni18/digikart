@@ -41,7 +41,7 @@ class PaymentTests(TestCase):
             email="s@example.com", full_name="Stu", password="Pass@1234"
         )
         self.client.force_authenticate(user=self.buyer)
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.p1 = product(self.cat, "A1", "40.00")
         self.p2 = product(self.cat, "B1", "30.00")
         self.b1 = bundle("A", self.p1, price="99.00")
@@ -105,7 +105,7 @@ class BundlePricingModeTests(TestCase):
     """SUM vs CUSTOM, and how nesting rolls up."""
 
     def setUp(self):
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.p1 = product(self.cat, "A1", "40.00")
         self.p2 = product(self.cat, "B1", "60.00")
 
@@ -146,7 +146,7 @@ class BundlePricingModeTests(TestCase):
 class AccessRuleTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="a@example.com", password="Pass@1234")
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.free = product(self.cat, "Free", is_free=True)
         self.paid = product(self.cat, "Paid", "49.00")
 
@@ -173,10 +173,10 @@ class AdminRevenueTests(TestCase):
             email="admin@example.com", password="Pass@1234", is_staff=True
         )
         self.buyer = User.objects.create_user(email="b@example.com", password="Pass@1234")
-        self.root = category("Medicine")
-        self.cat = category("Pathology", parent=self.root)
+        self.root = category("Creative Assets")
+        self.cat = category("Photography", parent=self.root)
         self.p = product(self.cat, "A1", "100.00")
-        self.b = bundle("Chapter", self.p, price="100.00", category=self.cat)
+        self.b = bundle("Starter Set", self.p, price="100.00", category=self.cat)
 
         client = APIClient()
         client.force_authenticate(user=self.buyer)
@@ -204,13 +204,13 @@ class AdminRevenueTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(Decimal(res.data["summary"]["total_revenue"]), Decimal("100.00"))
         names = {row["name"] for row in res.data["by_category"]}
-        self.assertIn("Medicine", names)
-        self.assertIn("Medicine · Pathology", names)
+        self.assertIn("Creative Assets", names)
+        self.assertIn("Creative Assets · Photography", names)
 
     def test_parent_category_totals_include_children(self):
         rows = {r["name"]: r["revenue"] for r in
                 self.admin_client.get("/api/v1/admin/revenue/").data["by_category"]}
-        self.assertEqual(rows["Medicine"], rows["Medicine · Pathology"])
+        self.assertEqual(rows["Creative Assets"], rows["Creative Assets · Photography"])
 
     def test_product_breakdown_lists_the_bundle_sale(self):
         rows = self.admin_client.get("/api/v1/admin/revenue/").data["by_product"]
@@ -229,9 +229,9 @@ class WebhookTests(TestCase):
     def setUp(self):
         cache.clear()
         self.buyer = User.objects.create_user(email="w@example.com", password="Pass@1234")
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.p = product(self.cat, "A1", "100.00")
-        self.b = bundle("Chapter", self.p, price="100.00")
+        self.b = bundle("Starter Set", self.p, price="100.00")
         client = APIClient()
         client.force_authenticate(user=self.buyer)
         self.order_res = client.post(
@@ -296,7 +296,7 @@ class CouponTests(TestCase):
         self.admin = User.objects.create_user(
             email="admin@example.com", password="Pass@1234", is_staff=True
         )
-        self.cat = category("Biochem")
+        self.cat = category("Design")
         self.p = product(self.cat, "Kinetics", "100.00")
         self.b = bundle("Kinetics", self.p, price="100.00")
         self.client.force_authenticate(user=self.buyer)
@@ -405,7 +405,7 @@ class CouponTests(TestCase):
 
     def test_cancel_releases_reserved_slot(self):
         Coupon.objects.create(code="REL", kind=Coupon.Kind.PERCENT, value="10.00", max_uses=1)
-        order = self._create_order(coupon="REL")
+        self._create_order(coupon="REL")
         self.client.post(
             "/api/v1/payments/cancel-order/",
             {"order_db_id": Order.objects.get().id}, format="json",
@@ -520,10 +520,10 @@ class ProductPricingTests(TestCase):
         self.client = APIClient()
         self.buyer = User.objects.create_user(email="n@example.com", password="Pass@1234")
         self.client.force_authenticate(user=self.buyer)
-        self.cat = category("Pathology")
+        self.cat = category("Photography")
         self.p1 = product(self.cat, "A1", "40.00")
         self.p2 = product(self.cat, "A2", "60.00")
-        self.b = bundle("Chapter", self.p1, self.p2)  # SUM = 100
+        self.b = bundle("Starter Set", self.p1, self.p2)  # SUM = 100
 
     def _pay(self, items, payment_id="pay_n"):
         order = self.client.post(

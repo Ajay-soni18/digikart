@@ -33,7 +33,7 @@ export default function ContactInbox() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">Messages</h1>
-        <p className="text-sm text-ink-soft">Doubts and support requests from students.</p>
+        <p className="text-sm text-ink-soft">Questions and support requests from buyers.</p>
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

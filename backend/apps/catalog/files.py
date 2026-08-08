@@ -10,11 +10,10 @@ Storage layout (private R2 bucket in prod, local media in dev):
 can never serve mixed old/new pages, and the viewer's IndexedDB cache key
 (which includes the version) invalidates automatically.
 
-Generalised from the old note pipeline. PDFs keep the full treatment — validated
-for readability, then downsampled into a fast-opening rendition so the first
-open of a 20-40 MB scan isn't a wait. Every other type (zip, psd, mp3, epub…) is
-checked for size and stored as-is, because there is nothing meaningful to
-compress and no viewer to feed.
+PDFs get the full treatment — validated for readability, then downsampled into a
+fast-opening rendition so the first open of a 20-40 MB scan isn't a wait. Every
+other type (zip, psd, mp3, epub…) is checked for size and stored as-is, because
+there is nothing meaningful to compress and no viewer to feed.
 
 All work happens in temp files — never whole-file RAM reads — and the temp files
 are always removed. A compression problem is never fatal: the file still uploads

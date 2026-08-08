@@ -36,7 +36,7 @@ class AdminProductFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductFile
         fields = [
-            "id", "product", "title", "delivery", "file_type", "mime_type",
+            "id", "product", "title", "delivery", "file_type",
             "original_key", "compressed_key", "file_version",
             "page_count", "size_bytes", "compressed_size_bytes",
             "order", "is_published",

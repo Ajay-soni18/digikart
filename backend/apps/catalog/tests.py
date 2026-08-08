@@ -50,8 +50,8 @@ class CatalogTestCase(TestCase):
         self.staff = User.objects.create_user(
             email="staff@example.com", password="pw", is_staff=True
         )
-        self.root = Category.objects.create(name="MBBS")
-        self.child = Category.objects.create(name="Pathology", parent=self.root)
+        self.root = Category.objects.create(name="Creative Assets")
+        self.child = Category.objects.create(name="Photography", parent=self.root)
 
     def product(self, title, price="49.00", *, is_free=False, category=None, published=True):
         return Product.objects.create(
@@ -65,13 +65,13 @@ class CatalogTestCase(TestCase):
 
 class CategoryTests(CatalogTestCase):
     def test_path_reads_root_first(self):
-        self.assertEqual(self.child.path, "MBBS · Pathology")
+        self.assertEqual(self.child.path, "Creative Assets · Photography")
 
     def test_slug_is_generated_and_unique(self):
-        a = Category.objects.create(name="Anatomy")
-        b = Category.objects.create(name="Anatomy")
-        self.assertEqual(a.slug, "anatomy")
-        self.assertEqual(b.slug, "anatomy-2")
+        a = Category.objects.create(name="Presets")
+        b = Category.objects.create(name="Presets")
+        self.assertEqual(a.slug, "presets")
+        self.assertEqual(b.slug, "presets-2")
 
     def test_category_cannot_be_its_own_ancestor(self):
         self.root.parent = self.child
@@ -81,7 +81,7 @@ class CategoryTests(CatalogTestCase):
     def test_category_never_grants_access(self):
         """The load-bearing separation: owning nothing, sitting in a category the
         user could 'reach', must not unlock a paid product."""
-        product = self.product("Cell Injury")
+        product = self.product("Moody Pack")
         self.assertFalse(product_unlocked(self.user, product))
         # Even an Entitlement wrongly pointing at a Category grants nothing.
         Entitlement.objects.create(
@@ -102,29 +102,29 @@ class OwnershipTests(CatalogTestCase):
         self.assertTrue(product_unlocked(self.user, free))
 
     def test_paid_product_locked_until_bought(self):
-        product = self.product("Cell Injury")
+        product = self.product("Moody Pack")
         self.assertFalse(product_unlocked(self.user, product))
         grant(self.user, product)
         self.assertTrue(product_unlocked(self.user, product))
 
     def test_staff_previews_everything(self):
-        product = self.product("Cell Injury")
+        product = self.product("Moody Pack")
         self.assertTrue(product_unlocked(self.staff, product))
 
     def test_purchase_does_not_leak_to_another_user(self):
-        product = self.product("Cell Injury")
+        product = self.product("Moody Pack")
         grant(self.user, product)
         self.assertFalse(product_unlocked(self.other, product))
 
     def test_inactive_entitlement_does_not_grant(self):
-        product = self.product("Cell Injury")
+        product = self.product("Moody Pack")
         grant(self.user, product)
         Entitlement.objects.filter(user=self.user).update(is_active=False)
         self.assertFalse(product_unlocked(self.user, product))
 
     def test_bundle_entitlement_unlocks_members(self):
         a, b = self.product("A"), self.product("B")
-        bundle = Bundle.objects.create(title="Pathology Complete")
+        bundle = Bundle.objects.create(title="Photography Complete")
         add_item(bundle, a)
         add_item(bundle, b)
         grant(self.user, bundle)
@@ -144,7 +144,7 @@ class OwnershipTests(CatalogTestCase):
         """The promise carried over from hierarchical entitlements: a product
         added to a bundle later is owned by everyone who already bought it."""
         existing = self.product("Existing")
-        bundle = Bundle.objects.create(title="Pathology Complete")
+        bundle = Bundle.objects.create(title="Photography Complete")
         add_item(bundle, existing)
         grant(self.user, bundle)
 

@@ -13,7 +13,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 // Absolute /api/v1 base — used where we can't go through axios (e.g. pdf.js,
 // which does its own ranged fetches for progressive PDF streaming).
-export const API_V1 = `${BASE_URL}/api/v1`;
+const API_V1 = `${BASE_URL}/api/v1`;
 
 const ACCESS_KEY = "digikart_access";
 const REFRESH_KEY = "digikart_refresh";
@@ -37,7 +37,7 @@ export const tokenStore = {
 
 // A timeout so a stalled network never leaves the UI spinning forever — a
 // timed-out request rejects and surfaces a friendly message (see apiError).
-// Large note uploads in the admin override this with `timeout: 0` (adminApi.js).
+// Large file uploads in the admin override this with `timeout: 0` (adminApi.js).
 const REQUEST_TIMEOUT = 30000;
 
 export const api = axios.create({

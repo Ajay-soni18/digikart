@@ -1,7 +1,7 @@
 /*
  * A reusable list panel for one resource level: fetches rows (optionally
  * filtered by a parent), and supports Add / Edit / Delete via a schema-driven
- * modal. Rows can be clickable to drill into children (e.g. subject → units).
+ * modal. Rows can be clickable to drill into children (e.g. category → products).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {

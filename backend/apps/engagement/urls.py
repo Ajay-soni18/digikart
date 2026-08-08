@@ -7,8 +7,6 @@ from .views import (
     BookmarkListView,
     BookmarkToggleView,
     ContactCreateView,
-    ProgressMarkView,
-    ProgressView,
 )
 
 app_name = "engagement"
@@ -18,6 +16,4 @@ urlpatterns = [
     path("contact/", ContactCreateView.as_view(), name="contact"),
     path("bookmarks/", BookmarkListView.as_view(), name="bookmarks"),
     path("bookmarks/toggle/", BookmarkToggleView.as_view(), name="bookmark-toggle"),
-    path("progress/", ProgressView.as_view(), name="progress"),
-    path("progress/product/<int:product_id>/", ProgressMarkView.as_view(), name="progress-mark"),
 ]

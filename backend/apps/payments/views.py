@@ -23,7 +23,7 @@ from apps.catalog.pricing import label_of, price_of, purchasable
 
 from . import coupons
 from .coupons import CouponError, normalize_code
-from .models import Entitlement, Order, OrderItem
+from .models import Order, OrderItem
 from .razorpay_client import (
     create_order,
     keys_configured,
@@ -358,7 +358,7 @@ class VerifyView(APIView):
 
 
 class CancelOrderView(APIView):
-    """Abandon an unpaid order (the student closed the Razorpay widget).
+    """Abandon an unpaid order (the buyer closed the Razorpay widget).
 
     Marks the order failed and releases any coupon slot it was holding so the
     coupon isn't tied up — and is never counted as used. Idempotent, and scoped
@@ -377,45 +377,11 @@ class CancelOrderView(APIView):
         return Response({"status": "ok"})
 
 
-class MyPurchasesView(APIView):
-    """The student's paid orders + a flat list of owned ids (to mark unlocked)."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        orders = (
-            Order.objects.filter(user=request.user, status=Order.Status.PAID)
-            .prefetch_related("items")
-        )
-        ct = {m: ContentType.objects.get_for_model(m) for m in (Product, Bundle)}
-        ents = Entitlement.objects.filter(user=request.user, is_active=True)
-        owned = {
-            "products": list(
-                ents.filter(content_type=ct[Product]).values_list("object_id", flat=True)
-            ),
-            "bundles": list(
-                ents.filter(content_type=ct[Bundle]).values_list("object_id", flat=True)
-            ),
-        }
-        return Response({
-            "orders": [
-                {
-                    "id": o.id,
-                    "amount": o.amount,
-                    "created_at": o.created_at,
-                    "items": [{"label": i.label, "price": i.price} for i in o.items.all()],
-                }
-                for o in orders
-            ],
-            "owned": owned,
-        })
-
-
 @method_decorator(csrf_exempt, name="dispatch")
 class WebhookView(APIView):
     """Razorpay server-to-server webhook (Dashboard → Settings → Webhooks).
 
-    A safety net for the client `handler` callback: if the student closes the
+    A safety net for the client `handler` callback: if the buyer closes the
     tab before /verify/ runs, Razorpay still notifies us here and we fulfill the
     order. We trust this endpoint ONLY after verifying the X-Razorpay-Signature
     against RAZORPAY_WEBHOOK_SECRET — there is no user session on these requests.

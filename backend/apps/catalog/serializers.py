@@ -1,4 +1,4 @@
-"""Public (student-facing) catalog serializers.
+"""Public (buyer-facing) catalog serializers.
 
 The rule these enforce: **no storage key or file URL ever appears in a public
 payload.** Files are reachable only through the signed-URL endpoint, which

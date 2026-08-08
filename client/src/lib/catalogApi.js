@@ -8,6 +8,5 @@ export const catalogApi = {
   tree: () => api.get("/categories/").then((r) => r.data),
   category: (slug) => api.get(`/categories/${slug}/`).then((r) => r.data),
   product: (slug) => api.get(`/products/${slug}/`).then((r) => r.data),
-  bundle: (slug) => api.get(`/bundles/${slug}/`).then((r) => r.data),
   search: (q) => api.get("/search/", { params: { q } }).then((r) => r.data),
 };
