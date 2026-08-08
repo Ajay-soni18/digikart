@@ -242,14 +242,18 @@ export default function ProductPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-ink">{money(bundle.price)}</span>
-                    <Button
-                      size="sm"
-                      variant={has("bundle", bundle.id) ? "secondary" : "primary"}
-                      disabled={has("bundle", bundle.id)}
-                      onClick={() => add("bundle", bundle.id)}
-                    >
-                      {has("bundle", bundle.id) ? "In cart" : "Add bundle"}
-                    </Button>
+                    {bundle.purchasable === false ? (
+                      <span className="text-sm text-muted">Nothing to buy yet</span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant={has("bundle", bundle.id) ? "secondary" : "primary"}
+                        disabled={has("bundle", bundle.id)}
+                        onClick={() => add("bundle", bundle.id)}
+                      >
+                        {has("bundle", bundle.id) ? "In cart" : "Add bundle"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

@@ -108,3 +108,27 @@ describe("CategoryPage", () => {
     expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
   });
 });
+
+describe("CategoryPage — unbuyable bundles", () => {
+  it("offers no Add button for a bundle the server marks unpurchasable", async () => {
+    const data = makeData();
+    data.bundles = [
+      { id: 9, slug: "empty", title: "Nothing Inside", price: "0.00",
+        product_count: 0, unlocked: false, is_coming_soon: false, purchasable: false },
+    ];
+    api.get.mockResolvedValue({ data });
+    renderPage();
+    await screen.findByText("Nothing Inside");
+    expect(screen.queryByRole("button", { name: /add bundle/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing to buy yet/i)).toBeInTheDocument();
+  });
+
+  it("still offers a purchasable bundle", async () => {
+    const data = makeData();
+    data.bundles[0].purchasable = true;
+    api.get.mockResolvedValue({ data });
+    renderPage();
+    await screen.findByText("Everything");
+    expect(screen.getByRole("button", { name: /add bundle/i })).toBeInTheDocument();
+  });
+});

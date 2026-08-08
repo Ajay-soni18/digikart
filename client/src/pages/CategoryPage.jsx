@@ -40,6 +40,10 @@ function BundleCard({ bundle, inCart, onAdd }) {
             <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600">
               <FiCheck className="h-4 w-4" /> Owned
             </span>
+          ) : bundle.purchasable === false ? (
+            // Empty, or holding only free items — checkout would reject a ₹0
+            // total, so don't offer a button that can only fail.
+            <span className="text-sm text-muted">Nothing to buy yet</span>
           ) : (
             <Button
               size="sm"

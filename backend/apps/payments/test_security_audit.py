@@ -211,11 +211,14 @@ class SignedUrlAccessTests(TestCase):
         self._grant(self.owner, self.mine)
         self.assertEqual(self._get(self.other, self.mine_file.id).status_code, 403)
 
-    def test_unpublished_file_is_403_even_for_owner(self):
-        self._grant(self.owner, self.mine)
+    def test_unpublishing_a_file_does_not_revoke_a_paid_purchase(self):
+        """Withdrawing something from sale must not repossess it from the people
+        who already paid — and a non-owner still gets nothing."""
         self.mine_file.is_published = False
         self.mine_file.save()
-        self.assertEqual(self._get(self.owner, self.mine_file.id).status_code, 403)
+        self.assertEqual(self._get(self.other, self.mine_file.id).status_code, 403)
+        self._grant(self.owner, self.mine)
+        self.assertEqual(self._get(self.owner, self.mine_file.id).status_code, 200)
 
     def test_bundle_purchase_unlocks_its_members_not_siblings(self):
         self._grant(self.owner, self.bundle)

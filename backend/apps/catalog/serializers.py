@@ -38,7 +38,7 @@ class ProductCardSerializer(serializers.ModelSerializer):
     unlocked = serializers.SerializerMethodField()
     purchasable = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
-    file_count = serializers.IntegerField(source="files.count", read_only=True)
+    file_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -57,6 +57,13 @@ class ProductCardSerializer(serializers.ModelSerializer):
 
     def get_thumbnail_url(self, obj):
         return obj.thumbnail.url if obj.thumbnail else ""
+
+    def get_file_count(self, obj):
+        """Uses the annotation the list views attach; falls back to a count for
+        callers that pass a plain instance. Without the annotation this was one
+        COUNT query per product — a 30-product page cost 30 extra round trips."""
+        annotated = getattr(obj, "annotated_file_count", None)
+        return annotated if annotated is not None else obj.files.count()
 
     def get_unlocked(self, obj):
         """Precomputed set when the view supplies one, so a grid of 50 products
@@ -103,6 +110,7 @@ class ProductDetailSerializer(ProductCardSerializer):
 class BundleCardSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
     unlocked = serializers.SerializerMethodField()
+    purchasable = serializers.SerializerMethodField()
     product_count = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
 
@@ -110,11 +118,15 @@ class BundleCardSerializer(serializers.ModelSerializer):
         model = Bundle
         fields = [
             "id", "slug", "title", "description", "thumbnail_url",
-            "price", "pricing", "unlocked", "product_count", "is_coming_soon",
+            "price", "pricing", "purchasable", "unlocked", "product_count",
+            "is_coming_soon",
         ]
 
     def get_price(self, obj):
         return bundle_price(obj)
+
+    def get_purchasable(self, obj):
+        return purchasable(obj)
 
     def get_product_count(self, obj):
         return obj.member_products().filter(is_published=True).count()
@@ -157,7 +169,8 @@ class CategoryNodeSerializer(serializers.ModelSerializer):
         return obj.image.url if obj.image else ""
 
     def get_product_count(self, obj):
-        return obj.products.filter(is_published=True).count()
+        annotated = getattr(obj, "annotated_product_count", None)
+        return annotated if annotated is not None else obj.products.filter(is_published=True).count()
 
     def get_children(self, obj):
         children = [c for c in obj.children.all() if c.is_published]

@@ -1,11 +1,13 @@
 """API tests for the public catalog and the admin CRUD behind it."""
 
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import BundleItem, Category, Product
-from .testing import bundle, category, product, product_file
+from .testing import add_member, bundle, category, product, product_file
 
 User = get_user_model()
 
@@ -245,3 +247,141 @@ class BulkActionTests(TestCase):
         self.assertEqual(res.status_code, 200)
         for key in ("revenue", "orders", "users", "categories", "products", "bundles"):
             self.assertIn(key, res.data)
+
+
+class DeletionIntegrityTests(TestCase):
+    """Deleting things other rows point at. Each of these returned a 500 or left
+    debris before; they are here so that stays fixed."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="admin@example.com", password="pw", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_deleting_a_parent_whose_child_holds_products_is_a_clean_400(self):
+        parent = category("Parent")
+        child = category("Child", parent=parent)
+        product(child, "Deep", "5.00")
+        res = self.client.delete(f"/api/v1/admin/categories/{parent.id}/")
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Category.objects.filter(id=parent.id).exists())
+        self.assertTrue(Product.objects.filter(title="Deep").exists())
+
+    def test_bulk_delete_of_a_category_holding_products_is_a_clean_400(self):
+        cat = category("Guarded")
+        product(cat, "Shield", "5.00")
+        res = self.client.post(
+            "/api/v1/admin/categories/bulk-delete/", {"ids": [cat.id]}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Category.objects.filter(id=cat.id).exists())
+
+    def test_empty_category_deletes_cleanly(self):
+        cat = category("Empty")
+        self.assertEqual(
+            self.client.delete(f"/api/v1/admin/categories/{cat.id}/").status_code, 204
+        )
+
+    def test_deleting_a_product_clears_the_bundle_items_pointing_at_it(self):
+        cat = category("C")
+        a, b = product(cat, "A", "10.00"), product(cat, "B", "20.00")
+        bundle_obj = bundle("Set", a, b)
+        a.delete()
+        remaining = list(BundleItem.objects.filter(bundle=bundle_obj))
+        self.assertEqual(len(remaining), 1)
+        self.assertTrue(all(i.item is not None for i in remaining), "dangling BundleItem left")
+
+    def test_deleting_a_product_reprices_the_bundles_that_held_it(self):
+        cat = category("C")
+        a, b = product(cat, "A", "10.00"), product(cat, "B", "20.00")
+        bundle_obj = bundle("Set", a, b)
+        a.delete()
+        from .pricing import bundle_price
+
+        self.assertEqual(bundle_price(bundle_obj), Decimal("20.00"))
+
+    def test_deleting_a_nested_bundle_clears_its_parent_item(self):
+        cat = category("C")
+        inner = bundle("Inner", product(cat, "P", "10.00"))
+        outer = bundle("Outer", inner)
+        inner.delete()
+        self.assertTrue(
+            all(i.item is not None for i in BundleItem.objects.filter(bundle=outer))
+        )
+
+
+class EmptyBundleTests(TestCase):
+    """A bundle that costs nothing must not be offered: checkout rejects a zero
+    total, so an Add button on it can only dead-end."""
+
+    def setUp(self):
+        self.cat = category("C")
+        self.user = User.objects.create_user(email="u@example.com", password="pw")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_empty_bundle_is_not_purchasable(self):
+        from .pricing import purchasable
+
+        self.assertFalse(purchasable(bundle("Nothing Inside")))
+
+    def test_bundle_of_only_free_products_is_not_purchasable(self):
+        from .pricing import purchasable
+
+        free = product(self.cat, "Free", is_free=True)
+        self.assertFalse(purchasable(bundle("All Free", free)))
+
+    def test_storefront_marks_it_unpurchasable(self):
+        bundle("Nothing Inside", category=self.cat)
+        res = self.client.get(f"/api/v1/categories/{self.cat.slug}/")
+        self.assertFalse(res.data["bundles"][0]["purchasable"])
+
+    def test_cart_rejects_it_with_a_clear_message(self):
+        empty = bundle("Nothing Inside")
+        res = self.client.post(
+            "/api/v1/payments/quote/",
+            {"items": [{"type": "bundle", "id": empty.id}]}, format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_a_bundle_becomes_purchasable_once_it_holds_something_paid(self):
+        from .pricing import purchasable
+
+        b = bundle("Fills Up")
+        self.assertFalse(purchasable(b))
+        add_member(b, product(self.cat, "Paid", "99.00"))
+        self.assertTrue(purchasable(b))
+
+
+class QueryCountTests(TestCase):
+    """The category page is the busiest read in the app; it must not scale its
+    query count with the number of products on it."""
+
+    def setUp(self):
+        self.cat = category("Busy")
+        for i in range(25):
+            product(self.cat, f"P{i}", "10.00")
+        self.user = User.objects.create_user(email="u@example.com", password="pw")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_category_page_query_count_does_not_grow_per_product(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get(f"/api/v1/categories/{self.cat.slug}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["products"]), 25)
+        self.assertLess(len(ctx), 15, f"{len(ctx)} queries for 25 products")
+
+    def test_file_count_is_still_correct_under_the_annotation(self):
+        target = Product.objects.get(title="P0")
+        product_file(target, "a.pdf")
+        product_file(target, "b.pdf")
+        res = self.client.get(f"/api/v1/categories/{self.cat.slug}/")
+        counts = {p["title"]: p["file_count"] for p in res.data["products"]}
+        self.assertEqual(counts["P0"], 2)
+        self.assertEqual(counts["P1"], 0)

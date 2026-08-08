@@ -326,12 +326,28 @@ class ProductFileTests(CatalogTestCase):
         grant(self.user, product)
         self.assertTrue(file_accessible(self.user, pf))
 
-    def test_unpublished_file_hidden_from_owners_but_visible_to_staff(self):
+    def test_unpublishing_does_not_repossess_what_someone_bought(self):
+        """`is_published` controls listing, not ownership — and it means the same
+        thing on a product as on one of its files."""
         product = self.product("Paid")
         pf = self.make_file(product, is_published=False)
+        self.assertFalse(file_accessible(self.user, pf))  # still not owned
         grant(self.user, product)
-        self.assertFalse(file_accessible(self.user, pf))
+        self.assertTrue(file_accessible(self.user, pf))
         self.assertTrue(file_accessible(self.staff, pf))
+
+    def test_unpublished_product_and_file_agree(self):
+        product = self.product("Paid")
+        pf = self.make_file(product)
+        grant(self.user, product)
+        product.is_published = False
+        product.save()
+        by_product = file_accessible(self.user, pf)
+        product.is_published = True
+        product.save()
+        pf.is_published = False
+        pf.save()
+        self.assertEqual(by_product, file_accessible(self.user, pf))
 
     def test_storage_key_is_the_original_key(self):
         product = self.product("P")

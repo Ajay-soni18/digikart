@@ -36,11 +36,16 @@ def bundle_price(bundle):
 
 
 def purchasable(obj):
-    """Whether `obj` can be bought on its own."""
+    """Whether `obj` can be bought on its own.
+
+    A bundle has to cost something. An empty bundle, or one holding only free
+    products, prices at 0 — and checkout rejects a 0 total — so without this
+    check the storefront would offer an Add button that always dead-ends.
+    """
     if isinstance(obj, Product):
         return (not obj.is_free) and (obj.price or Decimal("0.00")) > 0
     if isinstance(obj, Bundle):
-        return True
+        return bundle_price(obj) > 0
     return False
 
 
@@ -50,7 +55,10 @@ def price_of(obj):
             raise NotPurchasable(f"{label_of(obj)} isn't sold on its own.")
         return obj.price or Decimal("0.00")
     if isinstance(obj, Bundle):
-        return bundle_price(obj)
+        price = bundle_price(obj)
+        if price <= 0:
+            raise NotPurchasable(f"{label_of(obj)} is empty or entirely free.")
+        return price
     raise TypeError(f"Not purchasable: {type(obj)}")
 
 

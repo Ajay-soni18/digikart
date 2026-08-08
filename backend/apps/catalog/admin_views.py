@@ -7,6 +7,7 @@ after the new ones are safely in place.
 """
 
 from django.db import transaction
+from django.db.models import ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -60,8 +61,23 @@ class BulkActionsMixin:
         ids = request.data.get("ids") or []
         if not ids:
             return Response({"deleted": 0})
-        deleted, _ = self.get_queryset().filter(id__in=ids).delete()
+        try:
+            deleted, _ = self.get_queryset().filter(id__in=ids).delete()
+        except ProtectedError as exc:
+            # Products PROTECT their category. Bulk delete must refuse for the
+            # same reason a single delete does, and say so — not 500.
+            raise ValidationError({"detail": _protected_message(exc)}) from exc
         return Response({"deleted": deleted})
+
+
+def _protected_message(exc):
+    """Turn Django's ProtectedError into something an admin can act on."""
+    blockers = sorted({str(obj) for obj in exc.protected_objects})[:5]
+    return (
+        "Move or delete these first: " + ", ".join(blockers)
+        if blockers
+        else "Something still references this and must be removed first."
+    )
 
 
 class AdminCategoryViewSet(BulkActionsMixin, viewsets.ModelViewSet):
@@ -70,13 +86,23 @@ class AdminCategoryViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     queryset = Category.objects.select_related("parent").all()
 
     def perform_destroy(self, instance):
-        """Products use PROTECT, so a category holding stock can't vanish and
-        orphan them. Say so plainly instead of surfacing an IntegrityError."""
+        """Refuse to delete a category any product still lives in.
+
+        Checking `instance.products` alone is not enough: `parent` cascades, so
+        deleting a category also deletes its whole subtree, and a product sitting
+        in a *descendant* would raise ProtectedError from deep inside the
+        collector — surfacing as a 500. Catch it and explain instead.
+        """
         if instance.products.exists():
             raise ValidationError(
                 {"detail": "Move or delete this category's products before deleting it."}
             )
-        instance.delete()
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise ValidationError(
+                {"detail": "A sub-category still holds products. " + _protected_message(exc)}
+            ) from exc
 
 
 class AdminProductViewSet(BulkActionsMixin, viewsets.ModelViewSet):

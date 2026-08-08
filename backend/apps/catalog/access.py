@@ -34,11 +34,18 @@ def product_unlocked(user, product):
 def file_accessible(user, product_file):
     """Return True if `user` may fetch this specific file.
 
-    An unpublished file is closed to everyone but staff, so a half-prepared
-    upload can't leak to buyers who already own the product.
+    `is_published` controls *listing*, not ownership. Someone who has paid keeps
+    what they paid for even after the product or the file is withdrawn from
+    sale — unpublishing is how you take something off the shelf, not how you
+    repossess it.
+
+    This deliberately matches `product_unlocked`, which also ignores
+    `is_published`. The two used to disagree (an unpublished product stayed
+    readable, an unpublished file did not), which meant the same admin toggle
+    had two different meanings depending on which row it was set on.
+
+    The cost is that attaching a half-finished file to an already-sold product
+    exposes it to existing buyers immediately. That is the milder failure: the
+    alternative silently revokes access people paid for.
     """
-    if not product_file.is_published and not (
-        user and getattr(user, "is_authenticated", False) and user.is_staff
-    ):
-        return False
     return product_unlocked(user, product_file.product)

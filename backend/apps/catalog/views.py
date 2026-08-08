@@ -4,7 +4,7 @@ Browsing is open to anonymous visitors — it's the shop window. Everything that
 touches a *file* requires auth and goes through apps/catalog/file_views.py.
 """
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -18,6 +18,12 @@ from .serializers import (
     ProductCardSerializer,
     ProductDetailSerializer,
 )
+
+
+def _with_counts(products):
+    """Annotate the per-product file count so serializing a page of products
+    costs one query instead of one per row."""
+    return products.annotate(annotated_file_count=Count("files"))
 
 
 def _ownership_context(request):
@@ -68,7 +74,7 @@ class CategoryDetailView(APIView):
         category = get_object_or_404(Category, slug=slug, is_published=True)
         context = {"request": request, **_ownership_context(request)}
 
-        products = category.products.filter(is_published=True)
+        products = _with_counts(category.products.filter(is_published=True))
         bundles = Bundle.objects.filter(category=category, is_published=True)
         children = category.children.filter(is_published=True)
 
@@ -99,7 +105,7 @@ class ProductDetailView(APIView):
 
     def get(self, request, slug):
         product = get_object_or_404(
-            Product.objects.select_related("category").prefetch_related("files"),
+            _with_counts(Product.objects.select_related("category").prefetch_related("files")),
             slug=slug, is_published=True,
         )
         context = {"request": request, **_ownership_context(request)}
@@ -126,10 +132,12 @@ class SearchView(APIView):
 
         context = {"request": request, **_ownership_context(request)}
         categories = Category.objects.filter(is_published=True, name__icontains=query)[:6]
-        products = Product.objects.filter(
-            Q(title__icontains=query) | Q(description__icontains=query),
-            is_published=True,
-        ).select_related("category")[:12]
+        products = _with_counts(
+            Product.objects.filter(
+                Q(title__icontains=query) | Q(description__icontains=query),
+                is_published=True,
+            ).select_related("category")
+        )[:12]
         bundles = Bundle.objects.filter(is_published=True, title__icontains=query)[:6]
 
         return Response({
