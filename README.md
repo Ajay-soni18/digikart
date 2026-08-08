@@ -1,22 +1,26 @@
 # Digikart
 
-> **The digital product mart** — list and sell files, notes, videos, links and bundles.
+> **The digital product mart** — list and sell files, notes, videos and bundles.
 
-> ⚠️ **Migration in progress.** The codebase started life as a single-subject
-> study platform and is being generalized into a multi-purpose digital product
-> mart. The description below still reflects the study-platform model
-> (`Year→Subject→…→{Lecture,Note}`); it will be replaced as the
-> `Collection→Product` model lands.
+Digikart sells digital products. A buyer browses a category tree, opens a
+product, and pays via Razorpay; the files they bought are then served straight
+from private object storage through short-lived signed URLs, with PDFs opening
+in a watermarked in-browser viewer that never offers a download.
 
-A premium MBBS study platform: students browse year/subject content, watch
-chapter-wise YouTube lectures, and read **protected, watermarked notes** unlocked
-via Razorpay payments. Notes are priced individually or sold as **chapter / unit /
-subject bundles**; students add what they want to a **unified cart** (with optional
-**coupon** codes) and buying any level unlocks everything beneath it. Note PDFs are
-served straight from private object storage through short-lived signed URLs (Django
-never proxies the bytes) and the buyer's watermark is drawn in the browser. A custom
-admin dashboard controls all content, pricing, coupons, homepage text, and footer
-links — no code changes needed.
+The catalog is deliberately domain-neutral:
+
+- **Categories** are navigation only. They nest to any depth and never carry a
+  price or an entitlement, so the storefront can be reorganised freely without
+  ever granting or revoking someone's access.
+- **Products** are the sellable unit. Each holds one or more files of any type,
+  and may be fronted by a free, public YouTube video used as the hook — the
+  video sells the files, and the files are what's actually gated.
+- **Bundles** sell a set of products, and can nest other bundles. Membership is
+  resolved live, so anything added to a bundle later reaches everyone who
+  already bought it.
+
+A custom admin dashboard controls the whole catalog, pricing, coupons, homepage
+text and footer links — no code changes needed.
 
 ---
 
@@ -30,8 +34,8 @@ links — no code changes needed.
 | Database | PostgreSQL in prod (via `DATABASE_URL`); SQLite fallback for local dev |
 | Cache | Redis in prod (via `REDIS_URL`); in-memory fallback locally |
 | Payments | Razorpay (server-side signature verification) |
-| Files | Local filesystem in dev; private **Cloudflare R2** bucket in prod (S3-compatible, via django-storages) — every note stored as the untouched **original** + a backend-generated **compressed** rendition |
-| PDF | pdf.js viewer — bytes fetched **direct from storage** over HTTP Range via short-lived signed URLs; the **compressed** copy opens first and the **original** upgrades each page in place in the background; both cached in the browser (IndexedDB), watermark drawn **client-side** |
+| Files | Local filesystem in dev; private **Cloudflare R2** bucket in prod (S3-compatible, via django-storages). PDFs are stored as the untouched **original** plus a backend-generated **compressed** rendition; every other type is stored as-is |
+| PDF | pdf.js viewer — bytes fetched **direct from storage** over HTTP Range via short-lived signed URLs; the **compressed** copy opens first and the **original** upgrades each page in the background; both cached in the browser (IndexedDB), watermark drawn **client-side** |
 
 ## Repository layout
 
@@ -41,16 +45,20 @@ digikart/
 │  ├─ config/               # project (split settings: base/dev/prod)
 │  ├─ apps/
 │  │  ├─ accounts/          # custom User, JWT auth, profile, admin users
-│  │  ├─ content/           # Year→Subject→Section→Unit→Chapter→{Lecture,Note}
-│  │  │                     #   + public read APIs, admin CRUD, access check + signed-URL endpoint
-│  │  ├─ payments/          # Order/OrderItem/Entitlement/Coupon, Razorpay, pricing, entitlements
+│  │  ├─ catalog/           # Category tree + Product + ProductFile + Bundle
+│  │  │                     #   access.py       the single access rule
+│  │  │                     #   entitlements.py "do they own this?"
+│  │  │                     #   pricing.py      server-authoritative pricing
+│  │  │                     #   membership.py   Bundle→Product closure table
+│  │  │                     #   files.py        upload / compress / store
+│  │  ├─ payments/          # Order/OrderItem/Entitlement/Coupon, Razorpay
 │  │  ├─ engagement/        # Announcements, ContactMessage, Bookmark, Progress
-│  │  └─ siteconfig/        # SiteContent (homepage text + footer links, admin-editable)
+│  │  └─ siteconfig/        # SiteContent (page copy, admin-editable)
 │  ├─ requirements.txt
 │  └─ .env.example
 └─ client/                  # React + Vite + Tailwind
    └─ src/
-      ├─ auth/  lib/  components/  pages/   # student app
+      ├─ auth/  lib/  components/  pages/   # storefront
       └─ admin/                            # custom admin dashboard (/admin)
 ```
 
@@ -58,8 +66,8 @@ digikart/
 
 ## Prerequisites
 
-- **Python 3.12+** (developed on 3.14)
-- **Node.js 18+** (developed on 25) & npm
+- **Python 3.12+**
+- **Node.js 18+** & npm
 - *(optional)* PostgreSQL & Redis for prod-like local runs
 
 ## Backend setup
@@ -71,10 +79,16 @@ python3 -m venv .venv
 
 cp .env.example .env            # then edit .env (see below)
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py seed_content        # demo years/subjects/units/chapters/lectures
-.venv/bin/python manage.py createsuperuser     # prompts email, full_name, password
-.venv/bin/python manage.py runserver           # http://localhost:8000
+.venv/bin/python manage.py seed_catalog --preset both   # demo catalog
+.venv/bin/python manage.py createsuperuser              # prompts email, full_name, password
+.venv/bin/python manage.py runserver                    # http://localhost:8000
 ```
+
+`seed_catalog` ships two presets. `study` builds a course-shaped catalog
+(Medicine → Year 2 → Pathology); `creative` builds an unrelated one
+(Photography → presets, sample packs). The second one exists to keep the model
+honest — if `creative` ever becomes awkward to express, the catalog has drifted
+back towards being education-shaped. `--reset` clears the catalog first.
 
 ### Backend environment (`backend/.env`)
 
@@ -83,8 +97,8 @@ cp .env.example .env            # then edit .env (see below)
 | `SECRET_KEY` | Django secret (generate one; see `.env.example`) |
 | `DEBUG` | `True` locally, `False` in prod |
 | `ALLOWED_HOSTS` | comma-separated hostnames |
-| `DATABASE_URL` | Postgres DSN; unset → local SQLite |
-| `REDIS_URL` | Redis DSN; unset → in-memory cache |
+| `DATABASE_URL` | Postgres DSN; **leave commented out** for local SQLite (an empty value is not the same as unset — django-environ raises on `""`) |
+| `REDIS_URL` | Redis DSN; same empty-vs-unset trap |
 | `CORS_ALLOWED_ORIGINS` | extra frontend origins (Vite dev origin allowed automatically) |
 | `GOOGLE_OAUTH_CLIENT_ID` | **Required** — Google OAuth client id; the backend verifies every sign-in token against it (must match the frontend's `VITE_GOOGLE_CLIENT_ID`) |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Razorpay keys (TEST in dev, LIVE in prod) |
@@ -110,8 +124,31 @@ npm run dev                     # http://localhost:5173
 Open **http://localhost:5173** and click **Continue with Google** — the first
 sign-in creates the account automatically (Google is the only sign-up method).
 To grant admin access, mark a user `is_staff=True` (via Django's `/admin/` using
-a superuser, or the DB); after signing in with Google they'll see the React
-**`/admin`** dashboard.
+a superuser, or the DB); after signing in they'll see the React **`/admin`**
+dashboard.
+
+---
+
+## API
+
+Everything lives under `/api/v1/`. Browsing is public; anything that reaches a
+file requires auth.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /categories/` | the whole published navigation tree, in one response |
+| `GET /categories/<slug>/` | one category: breadcrumb, children, products, bundles |
+| `GET /products/<slug>/` | one product: metadata, its files, the bundles containing it |
+| `GET /bundles/<slug>/` | one bundle: price and members |
+| `GET /search/?q=` | across categories, products and bundles |
+| `GET /files/<id>/signed-url/` | **auth + ownership required** — short-lived signed URLs |
+| `POST /payments/quote/` | price a cart (server-authoritative, dedupes overlap) |
+| `POST /payments/create-order/` → `verify/` | Razorpay order + signature verification |
+| `POST /payments/webhook/` | server-to-server fulfilment fallback |
+
+Admin CRUD sits under `/api/v1/admin/` (`categories`, `products`,
+`product-files`, `bundles`, `bundle-items`, plus `overview` and `revenue`) and
+requires `is_staff`.
 
 ---
 
@@ -119,18 +156,19 @@ a superuser, or the DB); after signing in with Google they'll see the React
 
 A staff user (`is_staff=True`) can manage everything from the branded React admin:
 
-- **Content** — years, subjects, sections (Coming Soon toggles), units, chapters,
-  lectures, and **note uploads**, with **per-note pricing** (the note is the priced
-  leaf: free, or an individual price) plus **bundle pricing** on each chapter / unit /
-  subject (sum of its contents, a custom price, or not sold as a bundle). Also
-  standalone dashboard **general videos** (curated YouTube playlists).
+- **Catalog** — categories, products, and each product's files, with per-product
+  pricing (free, an individual price, or ₹0 to sell only inside a bundle) and a
+  per-file delivery mode (protected viewer for PDFs, or direct download).
+- **Bundles** — build a set from products and other bundles, priced as the sum
+  of its contents or at a custom price.
 - **Coupons** — percentage or flat-amount codes with usage caps, a minimum-amount
   rule, and a validity window.
 - **Announcements** — scheduled banner messages.
 - **Messages** — the Help & Contact inbox (with status).
-- **Site content** — homepage hero text, byline, and footer YouTube/Instagram/Telegram links.
-- **Students** — searchable user list.
-- **Overview** — totals + sales/revenue.
+- **Site content** — page copy and footer links.
+- **Buyers** — searchable user list.
+- **Overview / Revenue** — totals, time series, and revenue rolled up the
+  category tree (a parent's figure is the true total of everything beneath it).
 
 Django's built-in admin (`/admin/` on the backend) is also available as a
 low-level ops tool.
@@ -140,18 +178,19 @@ low-level ops tool.
 ## Testing
 
 ```bash
-cd backend
-.venv/bin/python manage.py test --settings=config.settings.test
+cd backend && .venv/bin/python manage.py test --settings=config.settings.test
+cd client  && npm test
 ```
 
 > Always pass `--settings=config.settings.test` — it forces a throwaway local
-> SQLite database, so the test run can never touch the real `DATABASE_URL`
-> (production Postgres).
+> SQLite database, so the test run can never touch the real `DATABASE_URL`.
 
-Covers auth (incl. single-device sessions), content access-gating via the
-signed-URL endpoint (free vs. locked vs. admin-preview, and "no file URL ever
-leaks into the public tree"), admin gating, the unified cart + coupon checkout,
-and the full payment flow (signature verification + hierarchical entitlement unlock).
+Covers auth (incl. single-device sessions), the access rule via the signed-URL
+endpoint (free vs locked vs admin-preview, and "no storage key ever leaks into a
+public payload"), admin gating, the unified cart + coupon checkout, and the full
+payment flow. `apps/payments/test_security_audit.py` is a separate adversarial
+suite: forged and replayed payments, another user's order, amounts tampered with
+after a quote, signed URLs without a purchase, and coupon probing.
 
 ---
 
@@ -159,20 +198,26 @@ and the full payment flow (signature verification + hierarchical entitlement unl
 
 - **APIs are secure-by-default**: every DRF endpoint requires auth unless it
   explicitly opts into public access (browsing). Admin endpoints require `is_staff`.
-- **Paid notes are never trusted to the client.** The single function
-  `content/access.py::chapter_unlocked` decides access (free, valid purchase via
-  chapter/unit/subject entitlement, or admin) and every endpoint defers to it.
-- **No raw file URLs.** A note's bytes live in a **private** bucket. The only way
-  to reach them is `GET /notes/<id>/signed-url/`, which re-checks access on every
-  request and returns a **60-second presigned URL**; the browser then fetches the
-  file **directly from storage** over HTTP Range. Django never serves the bytes.
+- **Paid files are never trusted to the client.** The single function
+  `catalog/access.py::product_unlocked` decides access (free, staff preview, or a
+  product/bundle entitlement) and every endpoint defers to it.
+- **Categories can never grant access.** Navigation and ownership are separate
+  graphs; there is a test asserting that an entitlement wrongly pointing at a
+  category unlocks nothing.
+- **No raw file URLs.** Bytes live in a **private** bucket. The only way to reach
+  them is `GET /files/<id>/signed-url/`, which re-checks access on every request
+  and returns a short-lived presigned URL; the browser then fetches the file
+  **directly from storage** over HTTP Range. Django never serves the bytes.
 - **Per-user watermark.** The viewer draws the buyer's **email + name on every
   page** (client-side, on the page canvas). It's a traceability/deterrent overlay
-  rather than an un-strippable burn-in — a deliberate trade for the huge
+  rather than an un-strippable burn-in — a deliberate trade for the large
   performance/cost win of not proxying files through the app.
   *No website can 100% prevent screenshots or screen recording — watermarking +
   protected access (and the [anti-capture wrapper](client/src/components/ProtectedContent.jsx))
   make casual sharing traceable and inconvenient, which is the realistic goal.*
+- **YouTube videos are never treated as protected.** A YouTube URL can't be
+  access-gated, so it is shown to everyone as a free hook rather than pretended
+  to be secure.
 - **Payments** are verified on the backend via Razorpay's HMAC-SHA256 signature
   before any entitlement is granted; prices are always computed server-side.
 
@@ -193,19 +238,12 @@ and the full payment flow (signature verification + hierarchical entitlement unl
 - Add `gunicorn` + `whitenoise` for serving; run `manage.py collectstatic`.
 - Swap Razorpay TEST keys for LIVE keys, and set `RAZORPAY_WEBHOOK_SECRET` to
   enable the server-to-server payment webhook.
-
-## Shipped since the first cut
-
-- **Unified cart + hierarchical bundles** — buy an individual note or a whole chapter / unit / subject; the server re-prices authoritatively and dedupes overlap (a note whose chapter is also in the cart is never charged twice).
-- **Coupons** — percentage / flat codes with usage caps + validity window, applied at checkout via a concurrency-safe two-phase **reserve → consume** (only counted once payment succeeds); managed from the admin.
-- **Per-note pricing** — the note is the priced leaf; chapters/units/subjects are priced as bundles (sum of contents, a custom price, or not sold whole).
-- **Standalone dashboard videos** — `GET /api/v1/general-videos/`: curated YouTube playlists (e.g. "The Academic Edge") shown on the dashboard, outside the MBBS hierarchy.
-- **Global search** — `GET /api/v1/search/` + the header `SearchBar` (years/subjects/units/chapters).
-- **Direct-from-storage note delivery** — signed URLs + HTTP Range; Django no longer proxies PDF bytes.
-- **Browser note cache** — assembled PDFs cached in IndexedDB, so repeat opens cost zero storage egress (cleared on logout).
-- **Payment webhook** — `POST /api/v1/payments/webhook/` fulfils orders even if the client callback is dropped (set `RAZORPAY_WEBHOOK_SECRET`).
-- **Dark mode** and the **anti-capture wrapper** on the notes viewer.
+- If bundle membership ever looks wrong after a bulk import or a restore,
+  `manage.py rebuild_bundle_membership` recomputes the closure table from
+  scratch. It's idempotent and safe to run any time.
 
 ## Roadmap / deferred
 
-- Video/image note types (the `Note.file_type` field already supports them).
+- Multi-seller support (seller accounts, payouts, moderation). The catalog is
+  single-seller by design today.
+- Uploaded (non-YouTube) video products with signed-URL streaming.

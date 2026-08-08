@@ -1,25 +1,32 @@
 /*
- * Global search for the top bar — finds years, subjects, units and chapters.
+ * Global search for the top bar — finds categories, products and bundles.
  * Fires only when the user presses Enter, a results dropdown, keyboard-dismiss,
  * and click-to-navigate.
  */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { FiSearch, FiAward, FiBookOpen, FiFolder, FiFileText } from "react-icons/fi";
-import { contentApi } from "../lib/contentApi";
+import { catalogApi } from "../lib/catalogApi";
 import { Spinner } from "./ui/Spinner";
 
 const TYPE_META = {
-  year: { Icon: FiAward, tone: "bg-navy-100 text-navy-600" },
-  subject: { Icon: FiBookOpen, tone: "bg-brand-100 text-brand-700 dark:text-brand-300" },
-  unit: { Icon: FiFolder, tone: "bg-teal-100 text-teal-700 dark:text-teal-300" },
-  chapter: { Icon: FiFileText, tone: "bg-gold-100 text-gold-700 dark:text-gold-300" },
+  category: { Icon: FiFolder, tone: "bg-teal-100 text-teal-700 dark:text-teal-300" },
+  product: { Icon: FiFileText, tone: "bg-gold-100 text-gold-700 dark:text-gold-300" },
+  bundle: { Icon: FiAward, tone: "bg-brand-100 text-brand-700 dark:text-brand-300" },
 };
 
 function destination(r) {
-  if (r.type === "subject" || r.type === "unit") return `/subjects/${r.subject_slug}`;
-  if (r.type === "chapter") return `/subjects/${r.subject_slug}/chapters/${r.chapter_id}/notes`;
-  return "/dashboard"; // years have no dedicated page
+  if (r.type === "category") return `/c/${r.slug}`;
+  return `/p/${r.slug}`; // products; bundles are reached from their category
+}
+
+/* The API returns three named lists; the dropdown wants one flat, typed list. */
+function flatten(data) {
+  return [
+    ...(data.categories || []).map((c) => ({ ...c, type: "category", label: c.name, sub: c.path })),
+    ...(data.products || []).map((p) => ({ ...p, type: "product", label: p.title, sub: "" })),
+    ...(data.bundles || []).map((b) => ({ ...b, type: "bundle", label: b.title, sub: "Bundle" })),
+  ];
 }
 
 export function SearchBar() {
@@ -38,9 +45,9 @@ export function SearchBar() {
     setSearched(term);
     setOpen(true);
     setLoading(true);
-    contentApi
+    catalogApi
       .search(term)
-      .then((d) => setResults(d.results || []))
+      .then((d) => setResults(flatten(d)))
       .catch(() => setResults([]))
       .finally(() => setLoading(false));
   };
@@ -76,7 +83,7 @@ export function SearchBar() {
             if (e.key === "Escape") setOpen(false);
             else if (e.key === "Enter") runSearch();
           }}
-          placeholder="Search subjects, units, chapters… (press Enter)"
+          placeholder="Search the catalog… (press Enter)"
           aria-label="Search content"
           className="w-full rounded-full border border-line-strong bg-surface py-2 pl-10 pr-3 text-sm text-ink placeholder:text-ink-soft/70 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40"
         />
@@ -93,7 +100,7 @@ export function SearchBar() {
           ) : (
             <ul className="max-h-80 overflow-y-auto py-1">
               {results.map((r, i) => {
-                const meta = TYPE_META[r.type] || TYPE_META.chapter;
+                const meta = TYPE_META[r.type] || TYPE_META.product;
                 return (
                   <li key={`${r.type}-${i}`}>
                     <button
@@ -105,7 +112,7 @@ export function SearchBar() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-ink">{r.label}</span>
-                        <span className="block truncate text-xs text-ink-soft">{r.sublabel}</span>
+                        <span className="block truncate text-xs text-ink-soft">{r.sub}</span>
                       </span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${meta.tone}`}>
                         {r.type}

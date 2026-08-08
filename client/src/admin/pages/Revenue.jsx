@@ -58,7 +58,7 @@ export default function Revenue() {
   const [range, setRange] = useState({ from: "", to: "" });
   const [rev, setRev] = useState(null);
   const [revError, setRevError] = useState(null);
-  const [tab, setTab] = useState("by_subject");
+  const [tab, setTab] = useState("by_category");
 
   // Transactions
   const [txnFilters, setTxnFilters] = useState({ status: "", search: "" });
@@ -97,9 +97,8 @@ export default function Revenue() {
   const totalPages = txns ? Math.max(1, Math.ceil((txns.count || 0) / pageSize)) : 1;
 
   const TABS = useMemo(() => ([
-    { key: "by_subject", label: "By subject" },
-    { key: "by_unit", label: "By unit" },
-    { key: "by_chapter", label: "By chapter" },
+    { key: "by_category", label: "By category" },
+    { key: "by_product", label: "By item" },
   ]), []);
 
   return (

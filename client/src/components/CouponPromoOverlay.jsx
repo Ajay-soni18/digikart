@@ -5,7 +5,7 @@
  * Behaviour:
  *   • Shows on the DASHBOARD only, and only to a signed-in user — it's a nudge
  *     for people who can actually buy notes, not a splash on the marketing page.
- *     Anywhere else (landing, auth, subjects, admin) it renders nothing.
+ *     Anywhere else (landing, auth, catalog, admin) it renders nothing.
  *   • Waits for the auth bootstrap to resolve before deciding, so a page refresh
  *     on /dashboard doesn't skip it while the session is still being verified.
  *   • Shows ONCE per browser (localStorage — see readSeen/markSeen for why it

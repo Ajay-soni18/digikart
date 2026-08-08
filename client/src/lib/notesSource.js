@@ -1,8 +1,8 @@
 /*
- * Note file sources for pdf.js — fetched DIRECTLY from object storage
+ * Product file sources for pdf.js — fetched DIRECTLY from object storage
  * (Cloudflare R2), never proxied through the backend.
  *
- * Every note has up to two renditions, served from one access check:
+ * Every protected file has up to two renditions, served from one access check:
  *   - compressed: small fast preview — the viewer opens this first
  *   - original:   the untouched upload — replaces pages in the background
  *
@@ -28,10 +28,10 @@
  */
 import * as pdfjsLib from "pdfjs-dist/build/pdf";
 import { api } from "./api";
-import { getCachedNote, putCachedNote } from "./notesCache";
+import { getCachedFile, putCachedFile } from "./notesCache";
 
-async function fetchSignedUrls(noteId) {
-  const { data } = await api.get(`/notes/${noteId}/signed-url/`);
+async function fetchSignedUrls(fileId) {
+  const { data } = await api.get(`/files/${fileId}/signed-url/`);
   return {
     version: data.version,
     originalUrl: data.original?.url ?? null,
@@ -67,7 +67,7 @@ function recordChunk(assembly, begin, chunk, total, key) {
   const [first] = assembly.covered;
   if (assembly.covered.length === 1 && first[0] === 0 && first[1] >= total) {
     assembly.stored = true; // guard: store exactly once
-    putCachedNote(key, assembly.buf).catch(() => {});
+    putCachedFile(key, assembly.buf).catch(() => {});
   }
 }
 
@@ -89,23 +89,23 @@ function recordChunk(assembly, begin, chunk, total, key) {
  *   `url` (full download, dev / no-Range storage). `quality` says which
  *   rendition this source actually is.
  */
-export async function createNoteSource(
-  noteId,
+export async function createFileSource(
+  fileId,
   signal,
   { userId, version, quality = "auto", onFatal } = {}
 ) {
   // 1) Cache check BEFORE asking the backend to sign URLs.
   if (userId && version) {
-    const original = await getCachedNote({ userId, noteId, version, quality: "original" });
+    const original = await getCachedFile({ userId, fileId, version, quality: "original" });
     if (original) return { data: original, quality: "original", version };
     if (quality === "auto") {
-      const compressed = await getCachedNote({ userId, noteId, version, quality: "compressed" });
+      const compressed = await getCachedFile({ userId, fileId, version, quality: "compressed" });
       if (compressed) return { data: compressed, quality: "compressed", version };
     }
   }
 
   // 2) Miss / stale → authorize + sign, then fetch the bytes directly from storage.
-  let current = await fetchSignedUrls(noteId);
+  let current = await fetchSignedUrls(fileId);
   // Some notes have no compressed rendition (tiny files, legacy rows,
   // compression skipped) — then the primary source IS the original.
   const resolved = quality === "original" || !current.compressedUrl ? "original" : "compressed";
@@ -114,7 +114,7 @@ export async function createNoteSource(
   // Always hand out a URL that is still valid for the next few seconds; refresh
   // from the backend when it is about to expire (cheap auth + sign call).
   const validUrl = async () => {
-    if (Date.now() > current.expiresAt - 5000) current = await fetchSignedUrls(noteId);
+    if (Date.now() > current.expiresAt - 5000) current = await fetchSignedUrls(fileId);
     return pickUrl(current);
   };
 
@@ -122,7 +122,7 @@ export async function createNoteSource(
   // bytes we are about to fetch even if the caller's `version` is stale.
   const cacheKey =
     userId && current.version
-      ? { userId, noteId, version: current.version, quality: resolved }
+      ? { userId, fileId, version: current.version, quality: resolved }
       : null;
 
   // Probe for Range support and discover the exact file length. A failure here
@@ -162,7 +162,7 @@ export async function createNoteSource(
       let res = await once(await validUrl());
       if (res.status === 401 || res.status === 403) {
         // URL expired/invalid between checks → force a refresh and retry once.
-        current = await fetchSignedUrls(noteId);
+        current = await fetchSignedUrls(fileId);
         res = await once(pickUrl(current));
       }
       if (res.status !== 206 && res.status !== 200) {

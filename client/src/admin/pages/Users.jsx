@@ -36,7 +36,7 @@ export default function Users() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Students</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">Buyers</h1>
         <p className="text-sm text-ink-soft">{count} registered{count === 1 ? "" : ""}.</p>
       </div>
 

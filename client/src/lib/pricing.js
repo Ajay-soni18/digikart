@@ -1,27 +1,23 @@
 /*
  * Client-side price helpers — DISPLAY ONLY. The backend re-prices every cart
- * authoritatively at checkout (see apps/payments/pricing.py); these just render
- * estimates and format amounts. A chapter exposes its computed whole-chapter
- * price as `bundle_price` (null when it isn't sold as a bundle); otherwise its
- * roll-up value is the sum of its (non-free) note prices, and units/subjects roll
- * up their children the same way.
+ * authoritatively at checkout (see apps/catalog/pricing.py); these only format
+ * amounts and add up what's on screen.
+ *
+ * The flat catalog needs far less arithmetic here than the old hierarchy did:
+ * products and bundles both arrive with a server-computed `price`, so there is
+ * nothing to roll up client-side.
  */
 
 // Whole rupees with the ₹ symbol.
-export const money = (v) => `₹${Number(v).toFixed(0)}`;
+export const money = (v) => `₹${Number(v || 0).toFixed(0)}`;
 
-export const chapterCost = (c) => {
-  if (c.is_free) return 0;
-  if (c.bundle_price != null) return Number(c.bundle_price);
-  return (c.notes || []).reduce((s, n) => s + (n.is_free ? 0 : Number(n.price)), 0);
-};
+// What a product costs on its own (0 when it's free).
+export const productCost = (p) => (p?.is_free ? 0 : Number(p?.price || 0));
 
-export const unitPrice = (u) =>
-  u.bundle_price != null
-    ? Number(u.bundle_price)
-    : (u.chapters || []).reduce((s, c) => s + chapterCost(c), 0);
+// A cart line's price, whichever kind it is.
+export const lineCost = (item) => Number(item?.price || 0);
 
-export const subjectPrice = (s) =>
-  s.bundle_price != null
-    ? Number(s.bundle_price)
-    : (s.units || []).reduce((t, u) => t + unitPrice(u), 0);
+// Sum of the lines the buyer will actually be charged for. Lines already owned,
+// or covered by a bundle in the same cart, cost nothing.
+export const payableTotal = (lines = []) =>
+  lines.reduce((total, line) => (line.owned || line.covered ? total : total + lineCost(line)), 0);

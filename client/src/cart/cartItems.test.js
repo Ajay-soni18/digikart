@@ -1,122 +1,92 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  bundleDescendantPairs,
   cartKey,
-  notePairs,
-  chapterNotePairs,
-  unitDescendantPairs,
-  subjectDescendantPairs,
-  isNoteSellable,
-  sellableNotes,
-  chapterRowState,
+  isProductSellable,
+  productPairs,
+  productRowState,
+  sellableProducts,
 } from "./cartItems";
 
+const product = (over = {}) => ({
+  id: 1,
+  price: "49.00",
+  is_free: false,
+  unlocked: false,
+  is_coming_soon: false,
+  ...over,
+});
+
 describe("cartKey", () => {
-  it("namespaces the id by type so a note and a chapter with the same id never collide", () => {
-    expect(cartKey("note", 5)).toBe("note:5");
-    expect(cartKey("chapter", 5)).toBe("chapter:5");
-    expect(cartKey("note", 5)).not.toBe(cartKey("chapter", 5));
+  it("keeps product and bundle ids from colliding", () => {
+    expect(cartKey("product", 3)).not.toBe(cartKey("bundle", 3));
   });
 });
 
-describe("notePairs / chapterNotePairs", () => {
-  it("maps notes to { type: 'note', id }", () => {
-    expect(notePairs([{ id: 1 }, { id: 2 }])).toEqual([
-      { type: "note", id: 1 },
-      { type: "note", id: 2 },
+describe("productPairs", () => {
+  it("maps products to cart pairs", () => {
+    expect(productPairs([{ id: 1 }, { id: 2 }])).toEqual([
+      { type: "product", id: 1 },
+      { type: "product", id: 2 },
     ]);
   });
-  it("tolerates missing/empty input", () => {
-    expect(notePairs()).toEqual([]);
-    expect(notePairs([])).toEqual([]);
-    expect(chapterNotePairs({})).toEqual([]);
-    expect(chapterNotePairs(null)).toEqual([]);
-    expect(chapterNotePairs({ notes: [{ id: 9 }] })).toEqual([{ type: "note", id: 9 }]);
+  it("tolerates a missing list", () => {
+    expect(productPairs(undefined)).toEqual([]);
   });
 });
 
-describe("unitDescendantPairs", () => {
-  it("lists every chapter and its notes beneath a unit", () => {
-    const unit = {
-      chapters: [
-        { id: 10, notes: [{ id: 100 }, { id: 101 }] },
-        { id: 11, notes: [] },
-      ],
-    };
-    expect(unitDescendantPairs(unit)).toEqual([
-      { type: "chapter", id: 10 },
-      { type: "note", id: 100 },
-      { type: "note", id: 101 },
-      { type: "chapter", id: 11 },
-    ]);
-  });
-});
-
-describe("subjectDescendantPairs", () => {
-  it("lists every unit, chapter and note beneath a subject", () => {
-    const subject = {
-      units: [
-        { id: 1, chapters: [{ id: 10, notes: [{ id: 100 }] }] },
-        { id: 2, chapters: [] },
-      ],
-    };
-    expect(subjectDescendantPairs(subject)).toEqual([
-      { type: "unit", id: 1 },
-      { type: "chapter", id: 10 },
-      { type: "note", id: 100 },
-      { type: "unit", id: 2 },
-    ]);
-  });
-});
-
-describe("isNoteSellable", () => {
-  it("is true only for a locked, priced, non-free note", () => {
-    expect(isNoteSellable({ price: "40", is_free: false, unlocked: false })).toBe(true);
-  });
-  it("is false for free, owned, or ₹0 notes", () => {
-    expect(isNoteSellable({ price: "40", is_free: true, unlocked: false })).toBe(false); // free
-    expect(isNoteSellable({ price: "40", is_free: false, unlocked: true })).toBe(false); // owned
-    expect(isNoteSellable({ price: "0", is_free: false, unlocked: false })).toBe(false); // ₹0 (bundle-only)
-  });
-});
-
-describe("sellableNotes", () => {
-  it("keeps only the individually-sellable notes", () => {
-    const notes = [
-      { id: 1, price: "40", is_free: false, unlocked: false }, // sellable
-      { id: 2, price: "0", is_free: true, unlocked: true }, // free
-      { id: 3, price: "50", is_free: false, unlocked: true }, // owned
-      { id: 4, price: "0", is_free: false, unlocked: false }, // bundle-only
-    ];
-    expect(sellableNotes(notes).map((n) => n.id)).toEqual([1]);
-    expect(sellableNotes()).toEqual([]);
-  });
-});
-
-describe("chapterRowState", () => {
-  const buyable = { bundle_purchasable: true, notes: [] };
-
-  it("returns coming_soon first, regardless of other flags", () => {
-    expect(chapterRowState({ is_coming_soon: true, unlocked: true, bundle_purchasable: true })).toBe("coming_soon");
-  });
-  it("returns owned when unlocked (before covered)", () => {
-    expect(chapterRowState({ unlocked: true }, { subjectInCart: true })).toBe("owned");
-  });
-  it("returns covered when a parent unit or subject is in the cart", () => {
-    expect(chapterRowState(buyable, { unitInCart: true })).toBe("covered");
-    expect(chapterRowState(buyable, { subjectInCart: true })).toBe("covered");
-  });
-  it("returns buyable for a purchasable bundle", () => {
-    expect(chapterRowState({ bundle_purchasable: true, notes: [] })).toBe("buyable");
-  });
-  it("returns buyable when it has at least one sellable note (even if no bundle)", () => {
+describe("bundleDescendantPairs", () => {
+  it("lists member products and nested bundles", () => {
     expect(
-      chapterRowState({ bundle_purchasable: false, notes: [{ price: "40", is_free: false, unlocked: false }] })
-    ).toBe("buyable");
+      bundleDescendantPairs({ products: [{ id: 1 }], bundles: [{ id: 9 }] })
+    ).toEqual([
+      { type: "product", id: 1 },
+      { type: "bundle", id: 9 },
+    ]);
   });
-  it("returns plain when nothing is individually purchasable", () => {
-    expect(
-      chapterRowState({ bundle_purchasable: false, notes: [{ price: "0", is_free: true, unlocked: true }] })
-    ).toBe("plain");
-    expect(chapterRowState({ bundle_purchasable: false, notes: [] })).toBe("plain");
+});
+
+describe("isProductSellable", () => {
+  it("is true for a locked, priced, non-free product", () => {
+    expect(isProductSellable(product())).toBe(true);
+  });
+  it("is false once owned", () => {
+    expect(isProductSellable(product({ unlocked: true }))).toBe(false);
+  });
+  it("is false when free", () => {
+    expect(isProductSellable(product({ is_free: true }))).toBe(false);
+  });
+  it("is false at zero price (bundle-only)", () => {
+    expect(isProductSellable(product({ price: "0.00" }))).toBe(false);
+  });
+});
+
+describe("sellableProducts", () => {
+  it("keeps only the ones that can be bought alone", () => {
+    const list = [product({ id: 1 }), product({ id: 2, is_free: true })];
+    expect(sellableProducts(list).map((p) => p.id)).toEqual([1]);
+  });
+});
+
+describe("productRowState", () => {
+  it("flags coming-soon before anything else", () => {
+    expect(productRowState(product({ is_coming_soon: true, unlocked: true }))).toBe(
+      "coming_soon"
+    );
+  });
+  it("reports owned products", () => {
+    expect(productRowState(product({ unlocked: true }))).toBe("owned");
+  });
+  it("reports covered when a containing bundle is in the cart", () => {
+    expect(productRowState(product(), { coveringBundleInCart: true })).toBe("covered");
+  });
+  it("reports buyable for a sellable product", () => {
+    expect(productRowState(product())).toBe("buyable");
+  });
+  it("reports free for a free product", () => {
+    expect(productRowState(product({ is_free: true }))).toBe("free");
+  });
+  it("reports free for a bundle-only product with no standalone price", () => {
+    expect(productRowState(product({ price: "0.00" }))).toBe("free");
   });
 });

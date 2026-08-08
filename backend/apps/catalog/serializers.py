@@ -15,12 +15,18 @@ from .pricing import bundle_price, product_price, purchasable
 
 
 class ProductFileSerializer(serializers.ModelSerializer):
-    """File metadata only. Deliberately no keys, no URLs."""
+    """File metadata only. Deliberately no keys, no URLs.
+
+    `version` is safe to publish and necessary: the viewer keys its IndexedDB
+    cache on it, so without it a re-uploaded file would serve stale pages.
+    """
+
+    version = serializers.CharField(read_only=True)
 
     class Meta:
         model = ProductFile
         fields = [
-            "id", "title", "delivery", "file_type",
+            "id", "title", "delivery", "file_type", "version",
             "page_count", "size_bytes", "compressed_size_bytes",
         ]
 

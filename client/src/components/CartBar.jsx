@@ -1,7 +1,7 @@
 /*
- * Global cart bar: a fixed bottom bar shown on every page whenever the notes
- * cart is non-empty, so a student can keep adding notes across chapters,
- * subjects and years and check them all out together from wherever they are.
+ * Global cart bar: a fixed bottom bar shown on every page whenever the cart is
+ * non-empty, so a buyer can keep adding items from anywhere in the catalog and
+ * check them all out together from wherever they are.
  * Hidden when the cart is empty. Owns its own CheckoutModal; on success it
  * empties the cart and pings `notifyPurchase()` so the mounted page refreshes.
  */
@@ -23,9 +23,9 @@ export function CartBar() {
   const flashTimer = useRef(null);
 
   // Live (debounced) quote whenever the cart changes or a purchase lands. The
-  // server is authoritative on price; we also drop any notes it reports as
-  // already owned (bought meanwhile via a bundle or the viewer) so the cart
-  // can't dead-end at a ₹0 "nothing to pay for" checkout.
+  // server is authoritative on price; we also drop any items it reports as
+  // already owned (bought meanwhile via a bundle) so the cart can't dead-end at
+  // a ₹0 "nothing to pay for" checkout.
   useEffect(() => {
     if (!count) {
       setTotal(null);

@@ -12,13 +12,13 @@ import { useAuth } from "../auth/AuthContext";
 const NAV = [
   { to: "/admin", end: true, label: "Overview", Icon: FiBarChart2 },
   { to: "/admin/revenue", label: "Revenue", Icon: FiTrendingUp },
-  { to: "/admin/content", label: "Content", Icon: FiBookOpen },
-  { to: "/admin/general-videos", label: "General Videos", Icon: FiFilm },
+  { to: "/admin/catalog", label: "Catalog", Icon: FiBookOpen },
+  { to: "/admin/bundles", label: "Bundles", Icon: FiFilm },
   { to: "/admin/coupons", label: "Coupons", Icon: FiTag },
   { to: "/admin/announcements", label: "Announcements", Icon: FiBell },
   { to: "/admin/messages", label: "Messages", Icon: FiMail },
   { to: "/admin/site", label: "Site content", Icon: FiSliders },
-  { to: "/admin/users", label: "Students", Icon: FiUsers },
+  { to: "/admin/users", label: "Buyers", Icon: FiUsers },
 ];
 
 export default function AdminLayout() {

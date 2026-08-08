@@ -1,66 +1,61 @@
-import { describe, it, expect } from "vitest";
-import { money, chapterCost, unitPrice, subjectPrice } from "./pricing";
+import { describe, expect, it } from "vitest";
+import { lineCost, money, payableTotal, productCost } from "./pricing";
 
 describe("money", () => {
-  it("formats whole rupees with the ₹ symbol", () => {
-    expect(money(100)).toBe("₹100");
-    expect(money("249.00")).toBe("₹249");
-    expect(money(0)).toBe("₹0");
+  it("formats whole rupees", () => {
+    expect(money(299)).toBe("₹299");
+    expect(money("49.50")).toBe("₹50");
   });
-  it("rounds to the nearest whole rupee", () => {
-    expect(money(99.6)).toBe("₹100");
-    expect(money(99.4)).toBe("₹99");
+  it("treats missing values as zero", () => {
+    expect(money(undefined)).toBe("₹0");
   });
 });
 
-describe("chapterCost", () => {
-  it("is 0 for a free chapter even if a bundle_price is set", () => {
-    expect(chapterCost({ is_free: true, bundle_price: "500", notes: [] })).toBe(0);
+describe("productCost", () => {
+  it("is the price of a paid product", () => {
+    expect(productCost({ price: "49.00", is_free: false })).toBe(49);
   });
-  it("uses bundle_price when present", () => {
-    expect(chapterCost({ bundle_price: "150.00", notes: [{ price: "40" }] })).toBe(150);
+  it("is zero for a free product, whatever price it carries", () => {
+    expect(productCost({ price: "49.00", is_free: true })).toBe(0);
   });
-  it("sums note prices when there is no bundle_price, skipping free notes", () => {
+});
+
+describe("payableTotal", () => {
+  it("adds up the lines that must be paid for", () => {
     expect(
-      chapterCost({
-        bundle_price: null,
-        notes: [
-          { price: "60", is_free: false },
-          { price: "40", is_free: false },
-          { price: "0", is_free: true },
-        ],
-      })
+      payableTotal([
+        { price: "100.00" },
+        { price: "40.00" },
+      ])
+    ).toBe(140);
+  });
+
+  it("skips lines already owned", () => {
+    expect(
+      payableTotal([
+        { price: "100.00", owned: true },
+        { price: "40.00" },
+      ])
+    ).toBe(40);
+  });
+
+  it("skips lines covered by a bundle in the same cart", () => {
+    expect(
+      payableTotal([
+        { price: "100.00" },
+        { price: "40.00", covered: true },
+      ])
     ).toBe(100);
   });
-  it("tolerates a missing notes array", () => {
-    expect(chapterCost({ bundle_price: null })).toBe(0);
+
+  it("is zero for an empty cart", () => {
+    expect(payableTotal([])).toBe(0);
   });
 });
 
-describe("unitPrice", () => {
-  it("uses bundle_price when present", () => {
-    expect(unitPrice({ bundle_price: "199.00", chapters: [] })).toBe(199);
-  });
-  it("sums chapter costs otherwise", () => {
-    expect(
-      unitPrice({ bundle_price: null, chapters: [{ bundle_price: "50" }, { bundle_price: "70" }] })
-    ).toBe(120);
-  });
-});
-
-describe("subjectPrice", () => {
-  it("uses bundle_price when present", () => {
-    expect(subjectPrice({ bundle_price: "400", units: [] })).toBe(400);
-  });
-  it("sums unit prices (which roll up chapters) otherwise", () => {
-    expect(
-      subjectPrice({
-        bundle_price: null,
-        units: [
-          { bundle_price: "100" },
-          { bundle_price: null, chapters: [{ bundle_price: "30" }, { bundle_price: "20" }] },
-        ],
-      })
-    ).toBe(150);
+describe("lineCost", () => {
+  it("reads whatever the server priced the line at", () => {
+    expect(lineCost({ price: "60.00" })).toBe(60);
+    expect(lineCost({})).toBe(0);
   });
 });

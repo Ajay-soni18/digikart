@@ -26,7 +26,7 @@ function renderBar({ items = [], authed = true } = {}) {
 
 describe("CartBar", () => {
   it("renders nothing when the user is not authenticated", () => {
-    renderBar({ authed: false, items: [{ type: "note", id: 1 }] });
+    renderBar({ authed: false, items: [{ type: "product", id: 1 }] });
     expect(screen.queryByText(/in cart/)).toBeNull();
   });
 
@@ -36,22 +36,22 @@ describe("CartBar", () => {
   });
 
   it("uses a singular label for one item", () => {
-    renderBar({ items: [{ type: "chapter", id: 1 }] });
+    renderBar({ items: [{ type: "bundle", id: 1 }] });
     expect(screen.getByText(/^1 item in cart$/)).toBeInTheDocument();
   });
 
   it("uses a plural label for multiple mixed items", () => {
-    renderBar({ items: [{ type: "chapter", id: 1 }, { type: "note", id: 2 }] });
+    renderBar({ items: [{ type: "bundle", id: 1 }, { type: "product", id: 2 }] });
     expect(screen.getByText(/^2 items in cart$/)).toBeInTheDocument();
   });
 
   it("shows the server-computed total once the quote resolves", async () => {
-    renderBar({ items: [{ type: "chapter", id: 1 }] });
+    renderBar({ items: [{ type: "bundle", id: 1 }] });
     expect(await screen.findByText(/₹170/)).toBeInTheDocument();
   });
 
   it("empties the cart (and hides the bar) when Clear is clicked", () => {
-    renderBar({ items: [{ type: "chapter", id: 1 }] });
+    renderBar({ items: [{ type: "bundle", id: 1 }] });
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.queryByText(/in cart/)).toBeNull();
   });

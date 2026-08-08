@@ -192,3 +192,62 @@ class AdminCatalogTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["products"], 1)
         self.assertEqual(res.data["categories"], 1)
+
+
+class BulkActionTests(TestCase):
+    """The admin multi-select needs these; without them publishing thirty
+    products means thirty requests."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="admin@example.com", password="pw", is_staff=True
+        )
+        self.user = User.objects.create_user(email="u@example.com", password="pw")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.cat = category("Photography")
+        self.a = product(self.cat, "A", "10.00")
+        self.b = product(self.cat, "B", "20.00")
+
+    def test_bulk_publish_and_hide(self):
+        res = self.client.post(
+            "/api/v1/admin/products/bulk-update/",
+            {"ids": [self.a.id, self.b.id], "fields": {"is_published": False}},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["updated"], 2)
+        self.assertEqual(Product.objects.filter(is_published=False).count(), 2)
+
+    def test_bulk_update_refuses_fields_outside_the_whitelist(self):
+        """Price must never be rewritable in bulk."""
+        res = self.client.post(
+            "/api/v1/admin/products/bulk-update/",
+            {"ids": [self.a.id], "fields": {"price": "1.00"}},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.a.refresh_from_db()
+        self.assertEqual(str(self.a.price), "10.00")
+
+    def test_bulk_delete(self):
+        res = self.client.post(
+            "/api/v1/admin/products/bulk-delete/", {"ids": [self.a.id]}, format="json"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(Product.objects.filter(id=self.a.id).exists())
+
+    def test_bulk_endpoints_reject_non_staff(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        res = client.post(
+            "/api/v1/admin/products/bulk-update/",
+            {"ids": [self.a.id], "fields": {"is_published": False}}, format="json",
+        )
+        self.assertEqual(res.status_code, 403)
+
+    def test_overview_reports_catalog_and_revenue_figures(self):
+        res = self.client.get("/api/v1/admin/overview/")
+        self.assertEqual(res.status_code, 200)
+        for key in ("revenue", "orders", "users", "categories", "products", "bundles"):
+            self.assertIn(key, res.data)

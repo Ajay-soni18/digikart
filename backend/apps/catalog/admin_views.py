@@ -33,7 +33,38 @@ from .files import (
 from .models import Bundle, BundleItem, Category, Product, ProductFile
 
 
-class AdminCategoryViewSet(viewsets.ModelViewSet):
+class BulkActionsMixin:
+    """`bulk-update` and `bulk-delete` over a list of ids.
+
+    The admin dashboard's multi-select needs these; without them publishing
+    thirty products means thirty requests. Only whitelisted boolean flags can be
+    set, so this can never become a way to rewrite prices in bulk.
+    """
+
+    BULK_FIELDS = {"is_published", "is_coming_soon"}
+
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update(self, request):
+        ids = request.data.get("ids") or []
+        fields = request.data.get("fields") or {}
+        unknown = set(fields) - self.BULK_FIELDS
+        if unknown:
+            raise ValidationError({"fields": f"Not updatable in bulk: {sorted(unknown)}"})
+        if not ids:
+            return Response({"updated": 0})
+        updated = self.get_queryset().filter(id__in=ids).update(**fields)
+        return Response({"updated": updated})
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        ids = request.data.get("ids") or []
+        if not ids:
+            return Response({"deleted": 0})
+        deleted, _ = self.get_queryset().filter(id__in=ids).delete()
+        return Response({"deleted": deleted})
+
+
+class AdminCategoryViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminCategorySerializer
     queryset = Category.objects.select_related("parent").all()
@@ -48,7 +79,7 @@ class AdminCategoryViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class AdminProductViewSet(viewsets.ModelViewSet):
+class AdminProductViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminProductSerializer
     queryset = Product.objects.select_related("category").prefetch_related("files").all()
@@ -61,7 +92,7 @@ class AdminProductViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class AdminProductFileViewSet(viewsets.ModelViewSet):
+class AdminProductFileViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     """CRUD for file rows. The bytes arrive via the `upload` action below."""
 
     permission_classes = [IsAdminUser]
@@ -123,7 +154,7 @@ class AdminProductFileViewSet(viewsets.ModelViewSet):
         return Response(AdminProductFileSerializer(product_file).data)
 
 
-class AdminBundleViewSet(viewsets.ModelViewSet):
+class AdminBundleViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminBundleSerializer
     queryset = Bundle.objects.select_related("category").prefetch_related("items").all()
@@ -155,12 +186,26 @@ class AdminBundleItemViewSet(viewsets.ModelViewSet):
 
 
 class AdminCatalogOverviewView(APIView):
-    """Counts for the admin dashboard."""
+    """Headline numbers for the admin dashboard.
+
+    Lives in the catalog app because that's where most of them come from; the
+    revenue and account figures are joined in here so the dashboard needs one
+    request rather than three.
+    """
 
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        from django.contrib.auth import get_user_model
+        from django.db.models import Sum
+
+        from apps.payments.models import Order
+
+        paid = Order.objects.filter(status=Order.Status.PAID)
         return Response({
+            "revenue": paid.aggregate(total=Sum("amount"))["total"] or 0,
+            "orders": paid.count(),
+            "users": get_user_model().objects.count(),
             "categories": Category.objects.count(),
             "products": Product.objects.count(),
             "published_products": Product.objects.filter(is_published=True).count(),

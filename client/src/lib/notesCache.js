@@ -12,9 +12,9 @@
  *   - "compressed": the small fast-preview PDF (opens instantly next time)
  *   - "original":   the untouched upload (full quality, replaces pages live)
  *
- * Cache key = userId + noteId + version + quality:
+ * Cache key = userId + fileId + version + quality:
  *   - userId   → one account can't read another's cached (locked) notes.
- *   - noteId   → obvious.
+ *   - fileId   → obvious.
  *   - version  → the note's `file_version`: a re-uploaded file gets a new
  *                version, so every old entry becomes a MISS automatically and
  *                stale versions are pruned on the next write.
@@ -79,20 +79,20 @@ const asPromise = (req) =>
     req.onerror = () => reject(req.error);
   });
 
-const cacheKey = (userId, noteId, version, quality) =>
-  `${userId}::${noteId}::${version}::${quality}`;
-const scopeKey = (userId, noteId) => `${userId}::${noteId}`;
+const cacheKey = (userId, fileId, version, quality) =>
+  `${userId}::${fileId}::${version}::${quality}`;
+const scopeKey = (userId, fileId) => `${userId}::${fileId}`;
 
 /**
- * Look up a cached rendition by its full (userId, noteId, version, quality) key.
+ * Look up a cached rendition by its full (userId, fileId, version, quality) key.
  * @returns {Promise<Uint8Array|null>} the cached PDF bytes, or null on miss.
  */
-export async function getCachedNote({ userId, noteId, version, quality }) {
-  if (!userId || !noteId || !version || !quality) return null;
+export async function getCachedFile({ userId, fileId, version, quality }) {
+  if (!userId || !fileId || !version || !quality) return null;
   try {
     const db = await openDB();
     const rec = await asPromise(
-      store(db, "readonly").get(cacheKey(userId, noteId, version, quality))
+      store(db, "readonly").get(cacheKey(userId, fileId, version, quality))
     );
     if (!rec?.blob) return null;
     // arrayBuffer() returns a fresh copy, so the stored blob is untouched even if
@@ -109,8 +109,8 @@ export async function getCachedNote({ userId, noteId, version, quality }) {
  * then enforces the entry cap. Silent on failure (the next open just re-fetches
  * from storage).
  */
-export async function putCachedNote({ userId, noteId, version, quality }, bytes) {
-  if (!userId || !noteId || !version || !quality || !bytes?.byteLength) return;
+export async function putCachedFile({ userId, fileId, version, quality }, bytes) {
+  if (!userId || !fileId || !version || !quality || !bytes?.byteLength) return;
   let db;
   try {
     db = await openDB();
@@ -118,10 +118,10 @@ export async function putCachedNote({ userId, noteId, version, quality }, bytes)
     return;
   }
   const record = {
-    key: cacheKey(userId, noteId, version, quality),
-    noteScope: scopeKey(userId, noteId),
+    key: cacheKey(userId, fileId, version, quality),
+    noteScope: scopeKey(userId, fileId),
     userId,
-    noteId,
+    fileId,
     version,
     quality,
     size: bytes.byteLength,
@@ -154,7 +154,7 @@ export async function clearNotesCache() {
 /* Remove every cached entry of a note that belongs to a DIFFERENT version than
    the one being written — the compressed and original entries of the CURRENT
    version stay. Uses a key cursor so the (large) blob values are never loaded;
-   the version is parsed from the primary key (userId::noteId::version::quality). */
+   the version is parsed from the primary key (userId::fileId::version::quality). */
 function pruneOtherVersions(db, noteScope, keepVersion) {
   const os = store(db, "readwrite");
   return new Promise((resolve, reject) => {

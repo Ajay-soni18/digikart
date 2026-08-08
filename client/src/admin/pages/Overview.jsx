@@ -8,12 +8,11 @@ import { Spinner } from "../../components/ui/Spinner";
 const CARDS = [
   { key: "revenue", label: "Revenue", Icon: FiTrendingUp, tone: "bg-gold-100 text-gold-600 dark:text-gold-300", money: true },
   { key: "orders", label: "Paid orders", Icon: FiShoppingCart, tone: "bg-teal-100 text-teal-600 dark:text-teal-300" },
-  { key: "users", label: "Students", Icon: FiUsers, tone: "bg-brand-100 text-brand-600 dark:text-brand-300" },
-  { key: "subjects", label: "Subjects", Icon: FiBookOpen, tone: "bg-navy-100 text-navy-600" },
-  { key: "lectures", label: "Lectures", Icon: FiVideo, tone: "bg-brand-100 text-brand-600 dark:text-brand-300" },
-  { key: "notes", label: "Notes", Icon: FiFileText, tone: "bg-gold-100 text-gold-600 dark:text-gold-300" },
-  { key: "chapters", label: "Chapters", Icon: FiFileText, tone: "bg-navy-100 text-navy-600" },
-  { key: "years", label: "Years", Icon: FiAward, tone: "bg-teal-100 text-teal-600 dark:text-teal-300" },
+  { key: "users", label: "Buyers", Icon: FiUsers, tone: "bg-brand-100 text-brand-600 dark:text-brand-300" },
+  { key: "categories", label: "Categories", Icon: FiBookOpen, tone: "bg-navy-100 text-navy-600" },
+  { key: "products", label: "Products", Icon: FiFileText, tone: "bg-gold-100 text-gold-600 dark:text-gold-300" },
+  { key: "files", label: "Files", Icon: FiVideo, tone: "bg-brand-100 text-brand-600 dark:text-brand-300" },
+  { key: "bundles", label: "Bundles", Icon: FiAward, tone: "bg-teal-100 text-teal-600 dark:text-teal-300" },
 ];
 
 export default function Overview() {

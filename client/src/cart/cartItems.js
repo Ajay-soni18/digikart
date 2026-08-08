@@ -1,41 +1,44 @@
 /*
  * Cart line-item helpers shared across the buy surfaces.
  *
- * Items are `{ type: "note" | "chapter" | "unit" | "subject", id }` and are keyed
- * by (type, id) — a note id and a chapter id can collide, so the type is always
- * part of the key. The descendant-pair helpers list everything a higher-level
- * item covers, so that adding a parent can supersede (remove) its children from
- * the cart — mirroring the backend's `resolve_cart` coverage rule and keeping a
- * bundle and its own contents from ever sitting in the cart together.
+ * Items are `{ type: "product" | "bundle", id }` and are keyed by (type, id) —
+ * a product id and a bundle id can collide, so the type is always part of the
+ * key. The coverage helpers mirror the backend's `resolve_cart` rule so that
+ * adding a bundle can supersede (remove) its members from the cart, and a
+ * bundle and its own contents never sit in the cart together.
+ *
+ * This is a display convenience only. The backend re-checks coverage on every
+ * quote and order, so a client that ignores all of this still cannot be charged
+ * twice for the same thing.
  */
 export const cartKey = (type, id) => `${type}:${id}`;
 
-export const notePairs = (notes) => (notes || []).map((n) => ({ type: "note", id: n.id }));
+export const productPairs = (products) =>
+  (products || []).map((p) => ({ type: "product", id: p.id }));
 
-export const chapterNotePairs = (chapter) => notePairs(chapter?.notes);
+// Everything a bundle covers: its member products, and any nested bundles the
+// server told us about.
+export const bundleDescendantPairs = (bundle) => [
+  ...productPairs(bundle?.products),
+  ...(bundle?.bundles || []).map((b) => ({ type: "bundle", id: b.id })),
+];
 
-export const unitDescendantPairs = (unit) =>
-  (unit.chapters || []).flatMap((c) => [{ type: "chapter", id: c.id }, ...chapterNotePairs(c)]);
+// A product the buyer can add to the cart on its own: locked, priced, not free.
+export const isProductSellable = (product) =>
+  !product.unlocked && !product.is_free && Number(product.price) > 0;
 
-export const subjectDescendantPairs = (subject) =>
-  (subject.units || []).flatMap((u) => [{ type: "unit", id: u.id }, ...unitDescendantPairs(u)]);
+export const sellableProducts = (products) => (products || []).filter(isProductSellable);
 
-// A note the student can add to the cart on its own: locked, priced, not free.
-export const isNoteSellable = (note) =>
-  !note.unlocked && !note.is_free && Number(note.price) > 0;
-
-export const sellableNotes = (notes) => (notes || []).filter(isNoteSellable);
-
-// How a chapter row should render in the subject Notes tab:
+// How a product row should render on a category page:
 //   "coming_soon" — placeholder, not clickable
-//   "owned"       — already unlocked; link to read, no buy control
-//   "covered"     — a parent unit/subject bundle is already in the cart
-//   "buyable"     — has a purchasable bundle and/or sellable notes → Add-to-cart
-//   "plain"       — nothing to buy (e.g. only free notes); plain link
-export function chapterRowState(chapter, { unitInCart = false, subjectInCart = false } = {}) {
-  if (chapter.is_coming_soon) return "coming_soon";
-  if (chapter.unlocked) return "owned";
-  if (unitInCart || subjectInCart) return "covered";
-  const buyable = chapter.bundle_purchasable || sellableNotes(chapter.notes).length > 0;
-  return buyable ? "buyable" : "plain";
+//   "owned"       — already unlocked; link to open it, no buy control
+//   "covered"     — a bundle containing it is already in the cart
+//   "buyable"     — sellable on its own → Add-to-cart
+//   "free"        — no payment needed; plain link
+export function productRowState(product, { coveringBundleInCart = false } = {}) {
+  if (product.is_coming_soon) return "coming_soon";
+  if (product.unlocked) return "owned";
+  if (coveringBundleInCart) return "covered";
+  if (product.is_free) return "free";
+  return isProductSellable(product) ? "buyable" : "free";
 }

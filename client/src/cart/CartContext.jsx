@@ -1,16 +1,16 @@
 /*
  * Global cart.
  *
- * Students add items — individual notes, a whole chapter, a whole unit, or a
- * whole subject — and check them out together (possibly spanning different
- * chapters, subjects or years). The cart lives ABOVE the router so it survives
- * navigating between pages, and is mirrored to localStorage so it survives a full
- * reload. Line items are `{ type: "note" | "chapter" | "unit" | "subject", id }`;
- * the backend prices and authorises everything at checkout, and never charges for
- * an item already covered by a higher-level item in the same cart.
+ * Buyers add items — an individual product or a whole bundle — and check them
+ * out together, possibly spanning unrelated parts of the catalog. The cart lives
+ * ABOVE the router so it survives navigating between pages, and is mirrored to
+ * localStorage so it survives a full reload. Line items are
+ * `{ type: "product" | "bundle", id }`; the backend prices and authorises
+ * everything at checkout, and never charges for an item already covered by a
+ * bundle in the same cart.
  *
- * Items are keyed by (type, id): a note id and a chapter id can collide, so every
- * helper takes the type too.
+ * Items are keyed by (type, id): a product id and a bundle id can collide, so
+ * every helper takes the type too.
  *
  * `purchaseVersion` is bumped after any successful purchase so the page that is
  * currently mounted can refresh its `unlocked` flags, without each checkout site
@@ -21,7 +21,7 @@ import { useAuth } from "../auth/AuthContext";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "digikart_cart";
-const VALID_TYPES = ["note", "chapter", "unit", "subject"];
+const VALID_TYPES = ["product", "bundle"];
 const keyOf = (type, id) => `${type}:${id}`;
 
 // Read the persisted cart: the owner's user id plus well-formed line items.
@@ -64,7 +64,7 @@ export function CartProvider({ children }) {
 
   // Bind the cart to the logged-in user. If the active account changes (a
   // different person signs in on this device, even after the previous token
-  // silently expired), reset the cart so one student never inherits another's.
+  // silently expired), reset the cart so one buyer never inherits another's.
   useEffect(() => {
     if (userId == null) return; // logged out is handled below
     if (ownerId == null) {

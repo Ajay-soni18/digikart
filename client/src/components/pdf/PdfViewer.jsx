@@ -26,7 +26,7 @@ import * as pdfjsLib from "pdfjs-dist/build/pdf";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker?worker";
 import { FiMaximize2, FiMinimize2, FiStar, FiEdit3 } from "react-icons/fi";
 import { useAuth } from "../../auth/AuthContext";
-import { createNoteSource } from "../../lib/notesSource";
+import { createFileSource } from "../../lib/notesSource";
 import { engagementApi } from "../../lib/engagementApi";
 import { Button } from "../ui/Button";
 import { LaserOverlay } from "./LaserOverlay";
@@ -60,7 +60,7 @@ function docParams(source) {
   };
 }
 
-const pageKey = (noteId) => `digikart_note_${noteId}_page`;
+const pageKey = (fileId) => `digikart_file_${fileId}_page`;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
@@ -111,7 +111,7 @@ function drawWatermark(canvas, text) {
    whose props actually changed re-run when one page's quality flips. */
 const PageSlot = memo(function PageSlot({
   pdf, hqPdf, hqReady, index, targetWidth, renderToken, watermarkText, bookmarked, onToggleBookmark,
-  laserActive, noteId,
+  laserActive, fileId,
 }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
@@ -176,7 +176,7 @@ const PageSlot = memo(function PageSlot({
       <div className="relative shadow-lift">
         <canvas ref={canvasRef} className="block bg-white" style={{ width: targetWidth, height: cssH }} />
         {/* Temporary laser ink layer — draws on this page only; never persisted. */}
-        <LaserOverlay active={laserActive} width={targetWidth} height={cssH} resetKey={noteId} />
+        <LaserOverlay active={laserActive} width={targetWidth} height={cssH} resetKey={fileId} />
         <span className="absolute left-2 top-2 z-10 rounded-md bg-navy-900/70 px-1.5 py-0.5 text-xs font-medium text-white">
           {index + 1}
         </span>
@@ -195,7 +195,7 @@ const PageSlot = memo(function PageSlot({
   );
 });
 
-export function PdfViewer({ noteId, version }) {
+export function PdfViewer({ fileId, productId, version }) {
   const { user } = useAuth();
   const userId = user?.id; // cache scope: a note is cached per (user, note, version)
   // Burned onto every page client-side (server no longer watermarks the bytes):
@@ -328,7 +328,7 @@ export function PdfViewer({ noteId, version }) {
         // transport — the COMPRESSED rendition when one exists, for the fastest
         // first paint — else a plain URL (dev). Django only ever authorized the
         // request — it never serves the bytes.
-        const source = await createNoteSource(noteId, ac.signal, {
+        const source = await createFileSource(fileId, ac.signal, {
           userId,
           version,
           quality: "auto",
@@ -371,7 +371,7 @@ export function PdfViewer({ noteId, version }) {
         destroyRef.current = Promise.allSettled([destroyRef.current, t.destroy()]).then(() => {});
       }
     };
-  }, [noteId, userId, version]);
+  }, [fileId, userId, version]);
 
   // --- Background ORIGINAL document (per-page quality upgrade) ----------
   // Starts only after the compressed priority pages are on screen, so it never
@@ -387,7 +387,7 @@ export function PdfViewer({ noteId, version }) {
     setHqStatus("loading");
     (async () => {
       try {
-        const source = await createNoteSource(noteId, ac.signal, {
+        const source = await createFileSource(fileId, ac.signal, {
           userId,
           version,
           quality: "original",
@@ -425,7 +425,7 @@ export function PdfViewer({ noteId, version }) {
         destroyRef.current = Promise.allSettled([destroyRef.current, t.destroy()]).then(() => {});
       }
     };
-  }, [pdf, priorityReady, primaryQuality, noteId, userId, version]);
+  }, [pdf, priorityReady, primaryQuality, fileId, userId, version]);
 
   // Warm the ORIGINAL's pages in the same priority order as the primary
   // (current page first, ±2 neighbours, then fanning outward; a jump
@@ -477,7 +477,7 @@ export function PdfViewer({ noteId, version }) {
     if (hqPdf && numPages > 0 && hqPages.size >= numPages) setHqStatus("ready");
   }, [hqPdf, hqPages, numPages]);
 
-  // --- Load this note's page bookmarks ---
+  // --- Load this product's page bookmarks ---
   useEffect(() => {
     setBookmarkedOnly(false);
     setBookmarkedPages(new Set());
@@ -487,13 +487,13 @@ export function PdfViewer({ noteId, version }) {
         setBookmarkedPages(
           new Set(
             bms
-              .filter((b) => b.kind === "note" && b.object_id === noteId && b.page)
+              .filter((b) => b.kind === "product" && b.object_id === productId && b.page)
               .map((b) => b.page)
           )
         )
       )
       .catch(() => {});
-  }, [noteId]);
+  }, [fileId, productId]);
 
   const togglePageBookmark = useCallback(
     (page) => {
@@ -502,9 +502,9 @@ export function PdfViewer({ noteId, version }) {
         next.has(page) ? next.delete(page) : next.add(page);
         return next;
       });
-      engagementApi.toggleBookmark("note", noteId, page).catch(() => {});
+      engagementApi.toggleBookmark("product", productId, page).catch(() => {});
     },
-    [noteId]
+    [productId]
   );
 
   // --- Measure available width (drives fit-to-width) ---
@@ -523,14 +523,14 @@ export function PdfViewer({ noteId, version }) {
   // --- Resume on the last-read page ---
   useEffect(() => {
     if (!pdf || !numPages) return;
-    const saved = Number(localStorage.getItem(pageKey(noteId)) || 1);
+    const saved = Number(localStorage.getItem(pageKey(fileId)) || 1);
     const target = Math.min(Math.max(1, saved), numPages);
     setPageNum(target);
     setPageInput(String(target));
     setPrefetchCenter(target); // load this page (+ neighbours) first
     // The scroll itself waits for the viewer to mount (see effect below) — the
     // page slots don't exist until the loader clears at 100%.
-  }, [pdf, numPages, noteId]);
+  }, [pdf, numPages, fileId]);
 
   // Once the viewer mounts (loader cleared), jump to the resumed page BEFORE the
   // browser paints — so the saved page is what shows first, with no flash of
@@ -652,7 +652,7 @@ export function PdfViewer({ noteId, version }) {
       if (userScrolledRef.current) {
         clearTimeout(persistTimer.current);
         persistTimer.current = setTimeout(() => {
-          localStorage.setItem(pageKey(noteId), String(current));
+          localStorage.setItem(pageKey(fileId), String(current));
         }, 400);
       }
     });
@@ -980,7 +980,7 @@ export function PdfViewer({ noteId, version }) {
                 bookmarked={bookmarkedPages.has(p)}
                 onToggleBookmark={togglePageBookmark}
                 laserActive={laserActive}
-                noteId={noteId}
+                fileId={fileId}
               />
             ))}
           </div>
