@@ -53,6 +53,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "apps.accounts",
     "apps.content",
+    "apps.catalog",
     "apps.payments",
     "apps.engagement",
     "apps.siteconfig",
