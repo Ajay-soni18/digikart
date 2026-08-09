@@ -132,3 +132,36 @@ describe("CategoryPage — unbuyable bundles", () => {
     expect(screen.getByRole("button", { name: /add bundle/i })).toBeInTheDocument();
   });
 });
+
+describe("CategoryPage — removing from the cart", () => {
+  it("takes a product back out when its button is clicked again", async () => {
+    renderPage();
+    await screen.findByText("Sellable");
+    fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
+    await waitFor(() => expect(cart()).toBe("product:1"));
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(cart()).toBe(""));
+  });
+
+  it("takes a bundle back out too", async () => {
+    renderPage();
+    await screen.findByText("Everything");
+    fireEvent.click(screen.getByRole("button", { name: /add bundle/i }));
+    await waitFor(() => expect(cart()).toBe("bundle:9"));
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(cart()).toBe(""));
+  });
+
+  it("restores the product's own Add button once the covering bundle is removed", async () => {
+    renderPage();
+    await screen.findByText("Everything");
+    fireEvent.click(screen.getByRole("button", { name: /add bundle/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^add$/i })).not.toBeInTheDocument()
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^add$/i })).toBeInTheDocument()
+    );
+  });
+});

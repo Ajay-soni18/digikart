@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { FiArrowRight, FiCheck, FiFolder, FiLock, FiPlay, FiShoppingCart } from "react-icons/fi";
+import { FiArrowRight, FiCheck, FiFolder, FiLock, FiPlay, FiShoppingCart, FiX } from "react-icons/fi";
 import { AppHeader } from "../components/AppHeader";
 import { Footer } from "../components/Footer";
 import { ComingSoonBadge } from "../components/ComingSoon";
@@ -20,7 +20,7 @@ import { catalogApi } from "../lib/catalogApi";
 import { money } from "../lib/pricing";
 import { productRowState } from "../cart/cartItems";
 
-function BundleCard({ bundle, inCart, onAdd }) {
+function BundleCard({ bundle, inCart, onToggle }) {
   return (
     <div className="rounded-card border border-brand-200 bg-brand-50/60 p-5 dark:bg-brand-900/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -48,10 +48,11 @@ function BundleCard({ bundle, inCart, onAdd }) {
             <Button
               size="sm"
               variant={inCart ? "secondary" : "primary"}
-              disabled={bundle.is_coming_soon || inCart}
-              onClick={() => onAdd(bundle)}
+              disabled={bundle.is_coming_soon}
+              onClick={() => onToggle(bundle)}
+              title={inCart ? "Remove from cart" : "Add to cart"}
             >
-              {inCart ? "In cart" : "Add bundle"}
+              {inCart ? <><FiX className="h-4 w-4" /> Remove</> : "Add bundle"}
             </Button>
           )}
         </div>
@@ -60,7 +61,7 @@ function BundleCard({ bundle, inCart, onAdd }) {
   );
 }
 
-function ProductRow({ product, state, inCart, onAdd, onOpen }) {
+function ProductRow({ product, state, inCart, onToggle, onOpen }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-brand-100 bg-surface p-4">
       <button
@@ -102,10 +103,10 @@ function ProductRow({ product, state, inCart, onAdd, onOpen }) {
             <Button
               size="sm"
               variant={inCart ? "secondary" : "primary"}
-              disabled={inCart}
-              onClick={() => onAdd(product)}
+              onClick={() => onToggle(product)}
+              title={inCart ? "Remove from cart" : "Add to cart"}
             >
-              {inCart ? "In cart" : <><FiShoppingCart className="h-4 w-4" /> Add</>}
+              {inCart ? <><FiX className="h-4 w-4" /> Remove</> : <><FiShoppingCart className="h-4 w-4" /> Add</>}
             </Button>
           </>
         )}
@@ -120,7 +121,7 @@ function ProductRow({ product, state, inCart, onAdd, onOpen }) {
 export default function CategoryPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { add, has, purchaseVersion } = useCart();
+  const { toggle, has, purchaseVersion } = useCart();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
@@ -221,7 +222,7 @@ export default function CategoryPage() {
                   key={bundle.id}
                   bundle={bundle}
                   inCart={has("bundle", bundle.id)}
-                  onAdd={(b) => add("bundle", b.id)}
+                  onToggle={(b) => toggle("bundle", b.id)}
                 />
               ))}
             </div>
@@ -240,7 +241,7 @@ export default function CategoryPage() {
                     coveringBundleInCart: coveredIds.has(product.id),
                   })}
                   inCart={has("product", product.id)}
-                  onAdd={(p) => add("product", p.id)}
+                  onToggle={(p) => toggle("product", p.id)}
                   onOpen={(p) => navigate(`/p/${p.slug}`)}
                 />
               ))}

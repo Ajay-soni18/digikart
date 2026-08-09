@@ -9,7 +9,7 @@
  * pass `null` to keep it closed.
  */
 import { useEffect, useState } from "react";
-import { FiCheckCircle, FiCreditCard, FiTag } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCreditCard, FiTag } from "react-icons/fi";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Alert } from "./ui/Alert";
@@ -35,7 +35,7 @@ function TotalRow({ label, value, strong = false, tone = "text-ink" }) {
   );
 }
 
-export function CheckoutModal({ items, user, onClose, onSuccess, onUnconfigured }) {
+export function CheckoutModal({ items, user, onClose, onSuccess, onUnconfigured, onRemove }) {
   const open = Array.isArray(items) && items.length > 0;
   const itemsKey = open ? JSON.stringify(items) : null;
 
@@ -131,12 +131,31 @@ export function CheckoutModal({ items, user, onClose, onSuccess, onUnconfigured 
         <Alert tone="error">{loadError}</Alert>
       ) : quote ? (
         <div className="space-y-5">
-          {/* Line items */}
-          <ul className="space-y-2">
-            {payable.map((it, i) => (
-              <li key={i} className="flex justify-between gap-3 text-sm">
+          {/* Line items. Each is removable here — this is the one screen that
+              shows the whole cart, so it's where "actually, not that one"
+              happens. Removing the last line closes the modal (see onRemove in
+              CartBar), since an empty checkout has nothing to confirm. */}
+          <ul className="space-y-1">
+            {payable.map((it) => (
+              <li
+                key={`${it.type}:${it.id}`}
+                className="group flex items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-brand-50/70 dark:hover:bg-brand-900/20"
+              >
                 <span className="min-w-0 truncate text-ink">{it.label}</span>
-                <span className="shrink-0 font-semibold text-ink">{money(it.price)}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-semibold text-ink">{money(it.price)}</span>
+                  {onRemove && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove({ type: it.type, id: it.id })}
+                      aria-label={`Remove ${it.label} from cart`}
+                      title="Remove from cart"
+                      className="grid h-7 w-7 place-items-center rounded-lg text-ink-soft opacity-60 transition hover:bg-rose-100 hover:text-rose-600 hover:opacity-100 focus:opacity-100 dark:hover:bg-rose-900/30"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

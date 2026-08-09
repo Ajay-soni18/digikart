@@ -15,7 +15,7 @@ import { paymentApi } from "../lib/paymentApi";
 import { money } from "../lib/pricing";
 
 export function CartBar() {
-  const { items, count, clear, removeMany, purchaseVersion, notifyPurchase } = useCart();
+  const { items, count, clear, remove, removeMany, purchaseVersion, notifyPurchase } = useCart();
   const { user, isAuthenticated } = useAuth();
   const [total, setTotal] = useState(null);
   const [checkoutItems, setCheckoutItems] = useState(null);
@@ -97,6 +97,18 @@ export function CartBar() {
       <CheckoutModal
         items={checkoutItems}
         user={user}
+        onRemove={(pair) => {
+          // Drop it from the cart AND from this checkout's snapshot, so the
+          // modal re-quotes without it. Emptying the cart closes the modal —
+          // there is nothing left to confirm.
+          remove(pair.type, pair.id);
+          setCheckoutItems((current) => {
+            const next = (current || []).filter(
+              (i) => !(i.type === pair.type && i.id === pair.id)
+            );
+            return next.length ? next : null;
+          });
+        }}
         onClose={() => setCheckoutItems(null)}
         onSuccess={() => {
           clear();

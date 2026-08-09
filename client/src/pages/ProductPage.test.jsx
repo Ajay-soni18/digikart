@@ -133,3 +133,23 @@ describe("ProductPage", () => {
     expect(await screen.findByText(/sold as part of a bundle/i)).toBeInTheDocument();
   });
 });
+
+describe("ProductPage — removing from the cart", () => {
+  it("toggles the product out of the cart", async () => {
+    renderPage();
+    await screen.findByText("Moody Pack");
+    fireEvent.click(screen.getByRole("button", { name: /add to cart/i }));
+    await waitFor(() => expect(cart()).toBe("product:1"));
+    fireEvent.click(screen.getByRole("button", { name: /remove from cart/i }));
+    await waitFor(() => expect(cart()).toBe(""));
+  });
+
+  it("toggles the upsell bundle out of the cart", async () => {
+    renderPage();
+    await screen.findByText("Moody Pack");
+    fireEvent.click(screen.getByRole("button", { name: /add bundle/i }));
+    await waitFor(() => expect(cart()).toBe("bundle:9"));
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    await waitFor(() => expect(cart()).toBe(""));
+  });
+});

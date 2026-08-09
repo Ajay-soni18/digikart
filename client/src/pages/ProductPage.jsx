@@ -9,7 +9,7 @@
  */
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { FiCheck, FiDownload, FiEye, FiLock, FiShoppingCart } from "react-icons/fi";
+import { FiCheck, FiDownload, FiEye, FiLock, FiShoppingCart, FiX } from "react-icons/fi";
 import { AppHeader } from "../components/AppHeader";
 import { Footer } from "../components/Footer";
 import { ComingSoonBadge } from "../components/ComingSoon";
@@ -71,7 +71,7 @@ function FileRow({ file, unlocked, onOpen }) {
 
 export default function ProductPage() {
   const { slug } = useParams();
-  const { add, has, purchaseVersion } = useCart();
+  const { toggle, has, purchaseVersion } = useCart();
   const [product, setProduct] = useState(null);
   const [error, setError] = useState(null);
   const [reading, setReading] = useState(null); // a protected file being viewed
@@ -176,10 +176,13 @@ export default function ProductPage() {
                 <span className="text-xl font-extrabold text-ink">{money(product.price)}</span>
                 <Button
                   variant={inCart ? "secondary" : "primary"}
-                  disabled={inCart || product.is_coming_soon}
-                  onClick={() => add("product", product.id)}
+                  disabled={product.is_coming_soon}
+                  onClick={() => toggle("product", product.id)}
+                  title={inCart ? "Remove from cart" : "Add to cart"}
                 >
-                  {inCart ? "In cart" : <><FiShoppingCart className="h-4 w-4" /> Add to cart</>}
+                  {inCart
+                    ? <><FiX className="h-4 w-4" /> Remove from cart</>
+                    : <><FiShoppingCart className="h-4 w-4" /> Add to cart</>}
                 </Button>
               </>
             ) : (
@@ -248,10 +251,12 @@ export default function ProductPage() {
                       <Button
                         size="sm"
                         variant={has("bundle", bundle.id) ? "secondary" : "primary"}
-                        disabled={has("bundle", bundle.id)}
-                        onClick={() => add("bundle", bundle.id)}
+                        onClick={() => toggle("bundle", bundle.id)}
+                        title={has("bundle", bundle.id) ? "Remove from cart" : "Add to cart"}
                       >
-                        {has("bundle", bundle.id) ? "In cart" : "Add bundle"}
+                        {has("bundle", bundle.id)
+                          ? <><FiX className="h-4 w-4" /> Remove</>
+                          : "Add bundle"}
                       </Button>
                     )}
                   </div>
