@@ -6,6 +6,7 @@ upload leaves the previous version serving, and the old objects are deleted only
 after the new ones are safely in place.
 """
 
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import ProtectedError
 from rest_framework import viewsets
@@ -105,7 +106,67 @@ class AdminCategoryViewSet(BulkActionsMixin, viewsets.ModelViewSet):
             ) from exc
 
 
-class AdminProductViewSet(BulkActionsMixin, viewsets.ModelViewSet):
+def _sold_before(obj):
+    """Has anyone ever bought this, or is anyone entitled to it now?
+
+    Checks both sides on purpose. An OrderItem is the receipt (it must survive
+    for refunds, disputes and tax records) and an Entitlement is the live grant.
+    Either one means the row is part of the money trail.
+    """
+    from apps.payments.models import Entitlement, OrderItem
+
+    content_type = ContentType.objects.get_for_model(type(obj))
+    return (
+        Entitlement.objects.filter(content_type=content_type, object_id=obj.id).exists()
+        or OrderItem.objects.filter(content_type=content_type, object_id=obj.id).exists()
+    )
+
+
+class NoDeleteAfterSaleMixin:
+    """Refuse to hard-delete anything that has ever been sold.
+
+    Every storefront that handles money settles here eventually: a purchased SKU
+    is not just a catalog row, it is the thing an order line, an entitlement, a
+    refund and a tax record all point at. Deleting it silently detaches those —
+    receipts start rendering "(deleted)", and because ids are reused by
+    sequence, a future row can inherit an old row's grants.
+
+    So selling something makes it permanent. Withdraw it with `is_published`
+    instead: unlisted, unbuyable, and still owned by the people who paid.
+    """
+
+    def perform_destroy(self, instance):
+        if _sold_before(instance):
+            raise ValidationError({
+                "detail": (
+                    f"“{instance}” has already been sold, so it can't be deleted — "
+                    "order history and existing access point at it. "
+                    "Uncheck “Published” to withdraw it from sale instead."
+                )
+            })
+        super().perform_destroy(instance)
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        """Same rule in bulk: refuse the whole batch rather than deleting the
+        safe half, so the admin sees one clear outcome instead of a partial one."""
+        ids = request.data.get("ids") or []
+        if not ids:
+            return Response({"deleted": 0})
+        rows = list(self.get_queryset().filter(id__in=ids))
+        blocked = [str(obj) for obj in rows if _sold_before(obj)]
+        if blocked:
+            raise ValidationError({
+                "detail": (
+                    "These have been sold and can't be deleted: "
+                    + ", ".join(blocked[:5])
+                    + ". Uncheck “Published” to withdraw them from sale instead."
+                )
+            })
+        return super().bulk_delete(request)
+
+
+class AdminProductViewSet(NoDeleteAfterSaleMixin, BulkActionsMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminProductSerializer
     queryset = Product.objects.select_related("category").prefetch_related("files").all()
@@ -180,7 +241,7 @@ class AdminProductFileViewSet(BulkActionsMixin, viewsets.ModelViewSet):
         return Response(AdminProductFileSerializer(product_file).data)
 
 
-class AdminBundleViewSet(BulkActionsMixin, viewsets.ModelViewSet):
+class AdminBundleViewSet(NoDeleteAfterSaleMixin, BulkActionsMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = AdminBundleSerializer
     queryset = Bundle.objects.select_related("category").prefetch_related("items").all()

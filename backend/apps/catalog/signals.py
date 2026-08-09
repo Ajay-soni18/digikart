@@ -14,7 +14,8 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .membership import rebuild_for
-from .models import Bundle, BundleItem, Product
+from .models import Bundle, BundleItem, Category, Product
+from .navigation import invalidate as invalidate_navigation
 
 
 @receiver(post_save, sender=BundleItem)
@@ -39,3 +40,16 @@ def _member_deleted(sender, instance, **kwargs):
     content_type = ContentType.objects.get_for_model(sender)
     for item in BundleItem.objects.filter(content_type=content_type, object_id=instance.pk):
         item.delete()
+
+
+@receiver(post_save, sender=Category)
+@receiver(post_delete, sender=Category)
+@receiver(post_save, sender=Product)
+@receiver(post_delete, sender=Product)
+def _navigation_changed(sender, instance, **kwargs):
+    """Drop the cached navigation tree on any edit that could change it.
+
+    Products are in here because each node reports its `product_count`: adding
+    or hiding a product changes the tree even though no Category row moved.
+    """
+    invalidate_navigation()

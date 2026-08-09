@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -17,13 +18,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.catalog.entitlements import grant, owns_object, owns_product
+from apps.catalog.entitlements import grant, owned_product_ids
 from apps.catalog.models import Bundle, BundleItem, BundleMembership, Product
-from apps.catalog.pricing import label_of, price_of, purchasable
+from apps.catalog.pricing import bundle_prices, category_path_map
 
 from . import coupons
 from .coupons import CouponError, normalize_code
-from .models import Order, OrderItem
+from .models import Entitlement, Order, OrderItem
 from .razorpay_client import (
     create_order,
     keys_configured,
@@ -66,63 +67,6 @@ def fulfill_order(order, payment_id="", signature=""):
 TYPE_MODELS = {"product": Product, "bundle": Bundle}
 
 
-def _is_owned(user, obj):
-    """Owned directly, or — for a product — through any bundle containing it."""
-    if isinstance(obj, Product):
-        return owns_product(user, obj)
-    return owns_object(user, obj)
-
-
-def _covering_keys(obj, present):
-    """The cart keys that already cover `obj`, so it must not be charged twice.
-
-    A product is covered by any bundle in the same cart that contains it; a
-    bundle is covered by any other bundle in the cart that nests it. Both
-    questions are answered by the membership closure rather than by walking a
-    hierarchy, because the flat catalog has none.
-    """
-    cart_bundle_ids = [i for kind, i in present if kind == "bundle"]
-    if not cart_bundle_ids:
-        return []
-    if isinstance(obj, Product):
-        covering = BundleMembership.objects.filter(
-            product=obj, bundle_id__in=cart_bundle_ids
-        ).values_list("bundle_id", flat=True)
-        return [("bundle", b) for b in covering]
-    if isinstance(obj, Bundle):
-        # A cart bundle covers this one when it unlocks everything this one does.
-        #
-        # A plain subset test is not enough: two bundles can unlock the *same*
-        # products (an outer bundle whose only member is an inner one), and then
-        # each would cover the other and the whole cart would price at zero. So
-        # equal sets are broken by nesting — the bundle that actually contains
-        # the other wins — and, failing that, by id, which guarantees exactly one
-        # survivor rather than none.
-        mine = set(
-            BundleMembership.objects.filter(bundle=obj).values_list("product_id", flat=True)
-        )
-        if not mine:
-            return []
-        covering = []
-        for other_id in cart_bundle_ids:
-            if other_id == obj.id:
-                continue
-            theirs = set(
-                BundleMembership.objects.filter(bundle_id=other_id)
-                .values_list("product_id", flat=True)
-            )
-            if not mine <= theirs:
-                continue
-            if mine < theirs:
-                covering.append(("bundle", other_id))          # strictly larger: it wins
-            elif _nests(other_id, obj.id):
-                covering.append(("bundle", other_id))          # same reach, but it contains us
-            elif not _nests(obj.id, other_id) and other_id < obj.id:
-                covering.append(("bundle", other_id))          # unrelated twins: lowest id wins
-        return covering
-    return []
-
-
 def _nests(outer_id, inner_id):
     """True if bundle `outer_id` contains `inner_id` somewhere beneath it."""
     bundle_ct = ContentType.objects.get_for_model(Bundle)
@@ -142,12 +86,30 @@ def _nests(outer_id, inner_id):
     return False
 
 
+# A cart is a request body, so it needs a ceiling. 100 is far above any real
+# basket and low enough that a hostile client can't turn one POST into a large
+# amount of work.
+MAX_CART_ITEMS = 100
+
+
 def resolve_cart(user, raw_items):
-    """Turn cart items into priced, server-validated lines. Items that are already
-    owned, or *covered by a bundle present in the same cart* (a product whose
-    bundle is also in the cart, or a bundle nested inside another one there), are
+    """Turn cart items into priced, server-validated lines.
+
+    Items already owned, or covered by a bundle present in the same cart, are
     flagged and excluded from the payable total — so overlapping cart items are
-    never charged twice, no matter what the client sends."""
+    never charged twice, no matter what the client sends.
+
+    Resolved in bulk rather than per line. The obvious loop costs a handful of
+    queries per item (fetch, ownership, coverage, price, and a breadcrumb walk
+    per label), which put a 30-item cart at ~134 queries — on the checkout path,
+    where latency is money. Everything below is batched, so the query count is
+    flat in the size of the cart.
+    """
+    if len(raw_items) > MAX_CART_ITEMS:
+        raise ValidationError(
+            f"A cart can hold at most {MAX_CART_ITEMS} items."
+        )
+
     # De-dupe first so we know every distinct (type, id) the cart contains; the
     # coverage check below tests each item against that set.
     present = set()
@@ -159,29 +121,119 @@ def resolve_cart(user, raw_items):
         present.add(key)
         unique.append(it)
 
+    product_ids = [i for kind, i in present if kind == "product"]
+    bundle_ids = [i for kind, i in present if kind == "bundle"]
+
+    products = {
+        p.id: p for p in Product.objects.filter(id__in=product_ids, is_published=True)
+    }
+    bundles = {
+        b.id: b for b in Bundle.objects.filter(id__in=bundle_ids, is_published=True)
+    }
+    # An id that didn't resolve is either unknown or unpublished. Both are 404 —
+    # an unpublished row must not be distinguishable from a missing one.
+    for kind, obj_id in present:
+        if obj_id not in (products if kind == "product" else bundles):
+            raise Http404(f"No such {kind}: {obj_id}")
+
+    # --- everything below is computed once for the whole cart ---------------
+    prices = bundle_prices(bundles.values())
+    paths = category_path_map()
+    owned_products = owned_product_ids(user)
+    owned_bundles = _owned_bundle_ids(user)
+    membership = _membership_map(bundle_ids)
+
     lines = []
     for it in unique:
-        model = TYPE_MODELS[it["type"]]
-        obj = get_object_or_404(model, pk=it["id"], is_published=True)
-        # Anything that can't be bought on its own — a free product, or one
-        # left at ₹0 because it only sells inside a bundle — is rejected here so
-        # it can't be priced (and certainly can't slip through at ₹0 and grant a
-        # free entitlement).
-        if not purchasable(obj):
-            raise ValidationError(
-                f"“{label_of(obj)}” isn’t available for individual purchase."
-            )
-        covered = bool(_covering_keys(obj, present))
+        kind, obj_id = it["type"], it["id"]
+        if kind == "product":
+            obj = products[obj_id]
+            # Anything that can't be bought on its own — a free product, or one
+            # left at ₹0 because it only sells inside a bundle — is rejected so
+            # it can't slip through at ₹0 and grant a free entitlement.
+            if obj.is_free or (obj.price or Decimal("0.00")) <= 0:
+                raise ValidationError(
+                    f"“{_label(obj, paths)}” isn’t available for individual purchase."
+                )
+            price = obj.price
+            owned = obj.id in owned_products
+            covered = any(obj.id in members for members in membership.values())
+        else:
+            obj = bundles[obj_id]
+            price = prices.get(obj.id, Decimal("0.00"))
+            if price <= 0:
+                raise ValidationError(
+                    f"“{_label(obj, paths)}” isn’t available for individual purchase."
+                )
+            owned = obj.id in owned_bundles
+            covered = _bundle_is_covered(obj.id, membership)
+
         lines.append({
-            "type": it["type"],
+            "type": kind,
             "id": obj.id,
-            "label": label_of(obj),
-            "price": price_of(obj),
-            "owned": _is_owned(user, obj),
+            "label": _label(obj, paths),
+            "price": price,
+            "owned": owned,
             "covered": covered,
             "_obj": obj,
         })
     return lines
+
+
+def _owned_bundle_ids(user):
+    if not (user and user.is_authenticated):
+        return set()
+    return set(
+        Entitlement.objects.filter(
+            user=user, is_active=True,
+            content_type=ContentType.objects.get_for_model(Bundle),
+        ).values_list("object_id", flat=True)
+    )
+
+
+def _membership_map(bundle_ids):
+    """{bundle_id: {product_id, …}} for the bundles in this cart, in one query."""
+    if not bundle_ids:
+        return {}
+    mapping = {b: set() for b in bundle_ids}
+    rows = BundleMembership.objects.filter(bundle_id__in=bundle_ids).values_list(
+        "bundle_id", "product_id"
+    )
+    for bundle_id, product_id in rows:
+        mapping[bundle_id].add(product_id)
+    return mapping
+
+
+def _bundle_is_covered(bundle_id, membership):
+    """Whether another cart bundle already unlocks everything this one does.
+
+    A plain subset test is not enough: two bundles can unlock the *same*
+    products (an outer bundle whose only member is an inner one), and then each
+    would cover the other and the whole cart would price at zero. So equal reach
+    is broken by nesting — the bundle that actually contains the other wins —
+    and, failing that, by id, which guarantees exactly one survivor rather than
+    none.
+    """
+    mine = membership.get(bundle_id) or set()
+    if not mine:
+        return False
+    for other_id, theirs in membership.items():
+        if other_id == bundle_id or not mine <= theirs:
+            continue
+        if mine < theirs:
+            return True
+        if _nests(other_id, bundle_id):
+            return True
+        if not _nests(bundle_id, other_id) and other_id < bundle_id:
+            return True
+    return False
+
+
+def _label(obj, paths):
+    """Order-line label, using the prebuilt breadcrumb map."""
+    if isinstance(obj, Product):
+        return f"{paths.get(obj.category_id, '')} · {obj.title}"
+    return f"{obj.title} (bundle)"
 
 
 def _payable(line):

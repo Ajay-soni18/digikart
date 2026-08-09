@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .entitlements import owned_product_ids
+from .navigation import get_cached_tree, set_cached_tree
 from .models import Bundle, Category, Product
 from .serializers import (
     BundleCardSerializer,
@@ -56,13 +57,21 @@ class CategoryTreeView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        # Cached globally: this payload carries no per-user field, so one copy
+        # is correct for every caller. See apps/catalog/navigation.py.
+        cached = get_cached_tree()
+        if cached is not None:
+            return Response(cached)
+
         roots = (
             Category.objects.filter(parent__isnull=True, is_published=True)
             .prefetch_related("children")
         )
-        return Response(
-            CategoryNodeSerializer(roots, many=True, context={"request": request}).data
-        )
+        payload = CategoryNodeSerializer(
+            roots, many=True, context={"request": request}
+        ).data
+        set_cached_tree(payload)
+        return Response(payload)
 
 
 class CategoryDetailView(APIView):

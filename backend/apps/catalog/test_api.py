@@ -3,10 +3,14 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import BundleItem, Category, Product
+from apps.payments.models import Entitlement, Order, OrderItem
+
+from .models import Bundle, BundleItem, Category, Product
 from .testing import add_member, bundle, category, product, product_file
 
 User = get_user_model()
@@ -385,3 +389,141 @@ class QueryCountTests(TestCase):
         counts = {p["title"]: p["file_count"] for p in res.data["products"]}
         self.assertEqual(counts["P0"], 2)
         self.assertEqual(counts["P1"], 0)
+
+
+class SoldItemsAreNotDeletableTests(TestCase):
+    """A purchased row is part of the money trail — an order line, an
+    entitlement, a refund and a tax record all point at it. Deleting it detaches
+    those, and because ids come from a sequence, a future row can inherit an old
+    row's grants. Selling something makes it permanent; `is_published` withdraws
+    it instead."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="admin@example.com", password="pw", is_staff=True
+        )
+        self.buyer = User.objects.create_user(email="buyer@example.com", password="pw")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.cat = category("C")
+        self.product = product(self.cat, "Sold Thing", "99.00")
+        self.bundle = bundle("Sold Bundle", self.product, price="149.00")
+
+    def _entitle(self, obj):
+        Entitlement.objects.create(
+            user=self.buyer,
+            content_type=ContentType.objects.get_for_model(type(obj)),
+            object_id=obj.id,
+        )
+
+    def test_unsold_product_deletes_normally(self):
+        spare = product(self.cat, "Never Sold", "10.00")
+        self.assertEqual(
+            self.client.delete(f"/api/v1/admin/products/{spare.id}/").status_code, 204
+        )
+
+    def test_product_with_an_entitlement_cannot_be_deleted(self):
+        self._entitle(self.product)
+        res = self.client.delete(f"/api/v1/admin/products/{self.product.id}/")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Published", str(res.data))
+        self.assertTrue(Product.objects.filter(id=self.product.id).exists())
+
+    def test_product_with_only_an_order_line_cannot_be_deleted(self):
+        """The receipt alone is reason enough — refunds and tax records need it
+        even after the entitlement is revoked."""
+        order = Order.objects.create(user=self.buyer, amount=Decimal("99.00"))
+        OrderItem.objects.create(
+            order=order,
+            content_type=ContentType.objects.get_for_model(Product),
+            object_id=self.product.id,
+            label="Sold Thing", price=Decimal("99.00"),
+        )
+        res = self.client.delete(f"/api/v1/admin/products/{self.product.id}/")
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Product.objects.filter(id=self.product.id).exists())
+
+    def test_sold_bundle_cannot_be_deleted(self):
+        self._entitle(self.bundle)
+        res = self.client.delete(f"/api/v1/admin/bundles/{self.bundle.id}/")
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Bundle.objects.filter(id=self.bundle.id).exists())
+
+    def test_bulk_delete_refuses_the_whole_batch_if_any_was_sold(self):
+        """All-or-nothing: a partial delete leaves the admin guessing what
+        happened."""
+        spare = product(self.cat, "Never Sold", "10.00")
+        self._entitle(self.product)
+        res = self.client.post(
+            "/api/v1/admin/products/bulk-delete/",
+            {"ids": [spare.id, self.product.id]}, format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(Product.objects.filter(id=spare.id).exists())
+        self.assertTrue(Product.objects.filter(id=self.product.id).exists())
+
+    def test_withdrawing_from_sale_is_the_supported_route(self):
+        self._entitle(self.product)
+        res = self.client.patch(
+            f"/api/v1/admin/products/{self.product.id}/", {"is_published": False},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_published)
+        # And the buyer keeps what they paid for.
+        from .access import product_unlocked
+
+        self.assertTrue(product_unlocked(self.buyer, self.product))
+
+
+class NavigationCacheTests(TestCase):
+    """The tree is the highest-fanout read and changes only on admin edits, so
+    it is cached with version-keyed invalidation rather than a TTL."""
+
+    def setUp(self):
+        cache.clear()
+        self.root = category("Root")
+        category("Child", parent=self.root)
+        self.client = APIClient()
+
+    def test_second_request_is_served_without_touching_the_database(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.client.get("/api/v1/categories/")  # warm
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client.get("/api/v1/categories/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(ctx), 0, f"{len(ctx)} queries on a cache hit")
+
+    def test_adding_a_category_invalidates_immediately(self):
+        first = self.client.get("/api/v1/categories/").data
+        self.assertEqual(len(first), 1)
+        category("Second Root")
+        second = self.client.get("/api/v1/categories/").data
+        self.assertEqual(len(second), 2, "stale tree served after an edit")
+
+    def test_adding_a_product_invalidates_because_counts_are_in_the_tree(self):
+        before = self.client.get("/api/v1/categories/").data[0]["product_count"]
+        product(self.root, "New", "10.00")
+        after = self.client.get("/api/v1/categories/").data[0]["product_count"]
+        self.assertEqual((before, after), (0, 1))
+
+    def test_unpublishing_a_category_invalidates(self):
+        self.assertEqual(len(self.client.get("/api/v1/categories/").data[0]["children"]), 1)
+        child = Category.objects.get(name="Child")
+        child.is_published = False
+        child.save()
+        self.assertEqual(len(self.client.get("/api/v1/categories/").data[0]["children"]), 0)
+
+    def test_the_cached_payload_carries_no_per_user_field(self):
+        """One copy is served to everyone, so a per-user field here would leak
+        one buyer's state to the next. If this ever fails, the cache must go."""
+        payload = self.client.get("/api/v1/categories/").data
+        leaky = {"unlocked", "price", "owned", "purchasable"}
+        def walk(nodes):
+            for node in nodes:
+                self.assertFalse(leaky & set(node), f"per-user field in tree: {set(node) & leaky}")
+                walk(node.get("children", []))
+        walk(payload)

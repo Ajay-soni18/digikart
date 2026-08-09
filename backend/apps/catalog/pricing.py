@@ -62,6 +62,72 @@ def price_of(obj):
     raise TypeError(f"Not purchasable: {type(obj)}")
 
 
+def bundle_prices(bundles):
+    """Price several bundles in a fixed number of queries.
+
+    `bundle_price` costs one query per bundle, which is fine on a product page
+    and not fine in a cart loop. This resolves every SUM bundle's members and
+    their prices in two queries total, whatever the cart size.
+    """
+    bundles = list(bundles)
+    if not bundles:
+        return {}
+
+    prices = {}
+    sum_ids = []
+    for bundle in bundles:
+        if bundle.pricing == BundlePricing.CUSTOM:
+            prices[bundle.id] = bundle.custom_price or Decimal("0.00")
+        else:
+            sum_ids.append(bundle.id)
+    if not sum_ids:
+        return prices
+
+    from .models import BundleMembership
+
+    rows = BundleMembership.objects.filter(
+        bundle_id__in=sum_ids, product__is_published=True
+    ).values_list("bundle_id", "product__is_free", "product__price")
+    totals = dict.fromkeys(sum_ids, Decimal("0.00"))
+    for bundle_id, is_free, price in rows:
+        totals[bundle_id] += Decimal("0.00") if is_free else (price or Decimal("0.00"))
+    prices.update(totals)
+    return prices
+
+
+def category_path_map():
+    """Every category's breadcrumb, built in one query.
+
+    `Category.path` walks `parent` one row at a time, so labelling a cart of
+    products costs a query per ancestor per line. The whole table is small
+    (navigation, not stock), so reading it once and assembling the paths in
+    memory is strictly cheaper.
+    """
+    from .models import Category
+
+    rows = dict(Category.objects.values_list("id", "name"))
+    parents = dict(Category.objects.values_list("id", "parent_id"))
+
+    paths = {}
+
+    def build(category_id, seen=None):
+        if category_id in paths:
+            return paths[category_id]
+        seen = seen or set()
+        if category_id in seen:  # defensive: a cycle can't be saved, but don't spin
+            return rows.get(category_id, "")
+        seen.add(category_id)
+        parent_id = parents.get(category_id)
+        name = rows.get(category_id, "")
+        path = f"{build(parent_id, seen)} · {name}" if parent_id else name
+        paths[category_id] = path
+        return path
+
+    for category_id in rows:
+        build(category_id)
+    return paths
+
+
 def label_of(obj):
     """The snapshot label stored on an OrderItem. Built from the category path so
     a receipt still reads sensibly after the catalog is reorganised."""

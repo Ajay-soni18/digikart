@@ -578,3 +578,83 @@ class ProductPricingTests(TestCase):
         )
         self.assertEqual(str(res.data["total"]), "100.00")
         self.assertFalse(res.data["items"][0]["owned"])
+
+
+@override_settings(RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET=SECRET)
+class CartScalingTests(TestCase):
+    """Checkout is the money path, so its cost must not scale with cart size.
+    Resolving per line cost ~4.5 queries per item; these lock in the batched
+    version and, more importantly, that it still answers identically."""
+
+    def setUp(self):
+        cache.clear()
+        self.buyer = User.objects.create_user(email="scale@example.com", password="pw")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.buyer)
+        # A deep category chain, so a naive label would walk it per line.
+        node = category("L0")
+        for depth in range(1, 5):
+            node = category(f"L{depth}", parent=node)
+        self.leaf = node
+        self.products = [product(self.leaf, f"P{i}", "10.00") for i in range(30)]
+        self.bundles = [bundle(f"B{i}", self.products[i], price="15.00") for i in range(5)]
+
+    def _quote(self, items):
+        return self.client.post("/api/v1/payments/quote/", {"items": items}, format="json")
+
+    def test_query_count_is_flat_in_cart_size(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        small = [{"type": "product", "id": p.id} for p in self.products[:2]]
+        large = [{"type": "product", "id": p.id} for p in self.products]
+
+        with CaptureQueriesContext(connection) as few:
+            self.assertEqual(self._quote(small).status_code, 200)
+        with CaptureQueriesContext(connection) as many:
+            self.assertEqual(self._quote(large).status_code, 200)
+
+        # 15x the items must not mean meaningfully more queries.
+        self.assertLessEqual(
+            len(many), len(few) + 3,
+            f"{len(few)} queries for 2 items vs {len(many)} for 30 — not batched",
+        )
+        self.assertLess(len(many), 25, f"{len(many)} queries for a 30-item cart")
+
+    def test_a_mixed_cart_prices_correctly(self):
+        items = [{"type": "product", "id": p.id} for p in self.products[10:15]]
+        items += [{"type": "bundle", "id": b.id} for b in self.bundles[:2]]
+        res = self._quote(items)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(str(res.data["subtotal"]), "80.00")  # 5x10 + 2x15
+
+    def test_labels_still_carry_the_full_category_path(self):
+        res = self._quote([{"type": "product", "id": self.products[0].id}])
+        self.assertEqual(res.data["items"][0]["label"], "L0 · L1 · L2 · L3 · L4 · P0")
+
+    def test_bundle_still_supersedes_its_member(self):
+        res = self._quote([
+            {"type": "bundle", "id": self.bundles[0].id},
+            {"type": "product", "id": self.products[0].id},
+        ])
+        self.assertEqual(str(res.data["total"]), "15.00")
+        covered = next(i for i in res.data["items"] if i["type"] == "product")
+        self.assertTrue(covered["covered"])
+
+    def test_owned_items_are_still_flagged(self):
+        from apps.catalog.entitlements import grant
+
+        grant(self.buyer, self.products[0])
+        res = self._quote([{"type": "product", "id": self.products[0].id}])
+        self.assertTrue(res.data["items"][0]["owned"])
+        self.assertEqual(str(res.data["total"]), "0.00")
+
+    def test_unpublished_item_is_404_not_a_silent_skip(self):
+        hidden = product(self.leaf, "Hidden", "10.00", published=False)
+        self.assertEqual(self._quote([{"type": "product", "id": hidden.id}]).status_code, 404)
+
+    def test_cart_size_is_capped(self):
+        """An unbounded cart is a request body that turns into unbounded work."""
+        items = [{"type": "product", "id": self.products[0].id, "n": i} for i in range(101)]
+        items = [{"type": "product", "id": p.id} for p in self.products] * 4  # 120 items
+        self.assertEqual(self._quote(items).status_code, 400)
