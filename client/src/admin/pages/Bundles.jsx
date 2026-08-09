@@ -23,7 +23,7 @@ export default function Bundles() {
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <CrudPanel
           title="Bundles"
           resource="bundles"

@@ -62,6 +62,7 @@ export function CrudPanel({
   parentDefaults = {},
   onOpen,
   itemLabel = (it) => it.name || it.title,
+  itemSubLabel, // optional muted second line, e.g. a category's parent path
   renderBadges,
   addLabel,
   refreshToken, // bump to force a reload from a sibling (e.g. playlist import)
@@ -169,10 +170,10 @@ export function CrudPanel({
   };
 
   return (
-    <section className="rounded-card bg-surface p-5 shadow-card ring-1 ring-line">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-base font-bold text-ink">{title}</h3>
-        <Button size="sm" icon={FiPlus} onClick={() => setModal({ mode: "create" })}>
+    <section className="min-w-0 rounded-card bg-surface p-5 shadow-card ring-1 ring-line">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="min-w-0 truncate text-base font-bold text-ink" title={title}>{title}</h3>
+        <Button className="shrink-0" size="sm" icon={FiPlus} onClick={() => setModal({ mode: "create" })}>
           {addLabel || "Add"}
         </Button>
       </div>
@@ -259,7 +260,7 @@ export function CrudPanel({
           {items.map((item) => (
             <li
               key={item.id}
-              className={`flex items-center gap-2 py-3 ${selectable && selected.has(item.id) ? "-mx-2 rounded-xl bg-brand-50/60 px-2" : ""}`}
+              className={`flex min-w-0 items-center gap-2 py-3 ${selectable && selected.has(item.id) ? "-mx-2 rounded-xl bg-brand-50/60 px-2" : ""}`}
             >
               {selectable && (
                 <CheckBox
@@ -268,27 +269,39 @@ export function CrudPanel({
                   ariaLabel={`Select ${itemLabel(item)}`}
                 />
               )}
+              {/* min-w-0 is what stops a long name from shoving the buttons off
+                  the row: without it a flex child refuses to shrink below its
+                  content width, so the text wraps to five lines instead of
+                  truncating. */}
               <button
                 type="button"
                 disabled={!onOpen}
                 onClick={() => onOpen?.(item)}
-                className={`flex-1 text-left ${onOpen ? "group cursor-pointer" : "cursor-default"}`}
+                className={`min-w-0 flex-1 text-left ${onOpen ? "group cursor-pointer" : "cursor-default"}`}
               >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className={`font-semibold text-ink ${onOpen ? "group-hover:text-brand-700 dark:group-hover:text-brand-300 dark:hover:text-brand-300" : ""}`}>
+                <span className="flex items-center gap-2">
+                  <span
+                    title={itemLabel(item)}
+                    className={`truncate font-semibold text-ink ${onOpen ? "group-hover:text-brand-700 dark:group-hover:text-brand-300" : ""}`}
+                  >
                     {itemLabel(item)}
                   </span>
                   {renderBadges?.(item, Badge)}
                 </span>
+                {itemSubLabel && (
+                  <span className="mt-0.5 block truncate text-xs text-ink-soft" title={itemSubLabel(item)}>
+                    {itemSubLabel(item)}
+                  </span>
+                )}
               </button>
-              <Button variant="ghost" size="sm" icon={FiEdit2} disabled={!!bulkBusy} onClick={() => setModal({ mode: "edit", item })}>
+              <Button className="shrink-0" variant="ghost" size="sm" icon={FiEdit2} disabled={!!bulkBusy} onClick={() => setModal({ mode: "edit", item })}>
                 <span className="hidden sm:inline">Edit</span>
               </Button>
-              <Button variant="dangerGhost" size="sm" icon={FiTrash2} disabled={!!bulkBusy} onClick={() => handleDelete(item)}>
+              <Button className="shrink-0" variant="dangerGhost" size="sm" icon={FiTrash2} disabled={!!bulkBusy} onClick={() => handleDelete(item)}>
                 <span className="hidden sm:inline">Delete</span>
               </Button>
               {onOpen && (
-                <button onClick={() => onOpen(item)} aria-label="Open" className="px-1 text-navy-300 hover:text-brand-700 dark:hover:text-brand-300">
+                <button onClick={() => onOpen(item)} aria-label="Open" className="shrink-0 px-1 text-navy-300 hover:text-brand-700 dark:hover:text-brand-300">
                   <FiChevronRight className="h-5 w-5" />
                 </button>
               )}

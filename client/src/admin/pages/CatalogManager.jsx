@@ -1,10 +1,14 @@
 /*
  * Catalog admin: categories → products → files.
  *
- * A three-column drill-down rather than a tree widget. Categories nest to any
- * depth, so the left column lists them flat with their full path — which is
- * easier to scan than an expandable tree once there are more than a dozen, and
- * far less code to get right.
+ * A drill-down rather than a tree widget: pick a category, then a product, then
+ * manage its files. Categories are listed flat by name with their parent path
+ * underneath — easier to scan than an expandable tree once there are more than a
+ * dozen, and far less code to get right.
+ *
+ * The panels only sit side by side once the viewport is genuinely wide. Three
+ * columns next to the admin sidebar leaves each one about 300px, which is not
+ * enough for a name, a badge and two buttons.
  */
 import { useEffect, useState } from "react";
 import { FiUploadCloud } from "react-icons/fi";
@@ -69,7 +73,7 @@ export default function CatalogManager() {
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-3">
         <CrudPanel
           title="Categories"
           resource="categories"
@@ -77,7 +81,11 @@ export default function CatalogManager() {
             setCategory(item);
             setProduct(null);
           }}
-          itemLabel={(it) => it.path || it.name}
+          itemLabel={(it) => it.name}
+          itemSubLabel={(it) => {
+            const parts = (it.path || "").split(" · ");
+            return parts.length > 1 ? parts.slice(0, -1).join(" · ") : "top level";
+          }}
           renderBadges={(it) => (it.product_count ? `${it.product_count} products` : null)}
           addLabel="New category"
           selectable
