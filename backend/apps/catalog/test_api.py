@@ -527,3 +527,70 @@ class NavigationCacheTests(TestCase):
                 self.assertFalse(leaky & set(node), f"per-user field in tree: {set(node) & leaky}")
                 walk(node.get("children", []))
         walk(payload)
+
+
+class SubtreeProductCountTests(TestCase):
+    """A category card says "Browse N items". The only N that means anything to
+    a shopper is everything beneath it — products live at the leaves, so a
+    direct-only count renders every branch as empty."""
+
+    def setUp(self):
+        cache.clear()
+        self.root = category("Medicine")
+        self.year = category("Year 2", parent=self.root)
+        self.patho = category("Pathology", parent=self.year)
+        self.general = category("General Pathology", parent=self.patho)
+        self.systemic = category("Systemic Pathology", parent=self.patho)
+        for i in range(4):
+            product(self.general, f"G{i}", "10.00")
+        for i in range(3):
+            product(self.systemic, f"S{i}", "10.00")
+        self.client = APIClient()
+
+    def _counts(self):
+        def walk(nodes, into):
+            for node in nodes:
+                into[node["name"]] = node["product_count"]
+                walk(node.get("children", []), into)
+            return into
+
+        return walk(self.client.get("/api/v1/categories/").data, {})
+
+    def test_a_branch_reports_everything_beneath_it(self):
+        counts = self._counts()
+        self.assertEqual(counts["Pathology"], 7)
+        self.assertEqual(counts["Year 2"], 7)
+        self.assertEqual(counts["Medicine"], 7)
+
+    def test_leaves_report_their_own(self):
+        counts = self._counts()
+        self.assertEqual(counts["General Pathology"], 4)
+        self.assertEqual(counts["Systemic Pathology"], 3)
+
+    def test_a_parent_is_never_smaller_than_a_child(self):
+        counts = self._counts()
+        self.assertGreaterEqual(counts["Pathology"], counts["General Pathology"])
+        self.assertGreaterEqual(counts["Medicine"], counts["Pathology"])
+
+    def test_unpublished_products_are_not_counted(self):
+        product(self.general, "Hidden", "10.00", published=False)
+        self.assertEqual(self._counts()["Pathology"], 7)
+
+    def test_an_empty_branch_still_reports_zero(self):
+        empty = category("Nothing Here", parent=self.root)
+        self.assertEqual(self._counts()["Nothing Here"], 0)
+        self.assertEqual(empty.products.count(), 0)
+
+    def test_child_cards_on_a_category_page_agree_with_the_tree(self):
+        res = self.client.get(f"/api/v1/categories/{self.year.slug}/")
+        counts = {c["name"]: c["product_count"] for c in res.data["children"]}
+        self.assertEqual(counts["Pathology"], 7)
+
+    def test_count_is_flat_in_query_cost(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        cache.clear()
+        with CaptureQueriesContext(connection) as ctx:
+            self.client.get("/api/v1/categories/")
+        self.assertLess(len(ctx), 20, f"{len(ctx)} queries to build the tree")

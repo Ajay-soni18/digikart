@@ -10,6 +10,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .counts import subtree_product_counts
 from .entitlements import owned_product_ids
 from .navigation import get_cached_tree, set_cached_tree
 from .models import Bundle, Category, Product
@@ -68,7 +69,8 @@ class CategoryTreeView(APIView):
             .prefetch_related("children")
         )
         payload = CategoryNodeSerializer(
-            roots, many=True, context={"request": request}
+            roots, many=True,
+            context={"request": request, "product_counts": subtree_product_counts()},
         ).data
         set_cached_tree(payload)
         return Response(payload)
@@ -81,7 +83,11 @@ class CategoryDetailView(APIView):
 
     def get(self, request, slug):
         category = get_object_or_404(Category, slug=slug, is_published=True)
-        context = {"request": request, **_ownership_context(request)}
+        context = {
+            "request": request,
+            "product_counts": subtree_product_counts(),
+            **_ownership_context(request),
+        }
 
         products = _with_counts(category.products.filter(is_published=True))
         bundles = Bundle.objects.filter(category=category, is_published=True)

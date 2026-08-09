@@ -169,8 +169,19 @@ class CategoryNodeSerializer(serializers.ModelSerializer):
         return obj.image.url if obj.image else ""
 
     def get_product_count(self, obj):
-        annotated = getattr(obj, "annotated_product_count", None)
-        return annotated if annotated is not None else obj.products.filter(is_published=True).count()
+        """Published products at or BENEATH this category.
+
+        A direct-only count reads as "empty" for any category whose stock sits
+        one level deeper, which is most of them. The view supplies a precomputed
+        roll-up; the fallback keeps a bare serializer honest at the cost of a
+        query.
+        """
+        counts = self.context.get("product_counts")
+        if counts is not None:
+            return counts.get(obj.id, 0)
+        from .counts import subtree_product_counts
+
+        return subtree_product_counts().get(obj.id, 0)
 
     def get_children(self, obj):
         children = [c for c in obj.children.all() if c.is_published]
