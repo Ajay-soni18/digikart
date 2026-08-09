@@ -9,6 +9,7 @@ import {
   FaYoutube,
   FaInstagram,
   FaTelegramPlane,
+  FaGlobe,
   FaHeadset,
   FaInfoCircle,
   FaUserShield,
@@ -20,26 +21,36 @@ const OWNER = "Digikart";
 const TAGLINE =
   "A digital product mart — files, guides, presets and bundles, delivered instantly.";
 
-// Social channel links are fixed (not admin-editable). Update a URL here if a
-// channel ever moves.
+// Digikart has no social accounts yet, so these point at each platform's own
+// home page rather than at a handle that doesn't exist — a link to
+// /@digikart 404s and reads as abandoned, which is worse than no link at all.
+// Swap in the real profile URLs the moment the accounts are created; nothing
+// else needs to change.
 const SOCIALS = [
   {
-    href: "https://www.youtube.com/@digikart",
+    href: "https://www.youtube.com",
     label: "YouTube",
     Icon: FaYoutube,
     hover: "hover:text-[#ff0000]",
   },
   {
-    href: "https://www.instagram.com/digikart",
+    href: "https://www.instagram.com",
     label: "Instagram",
     Icon: FaInstagram,
     hover: "hover:text-[#e1306c]",
   },
   {
-    href: "https://t.me/digikart",
+    href: "https://telegram.org",
     label: "Telegram",
     Icon: FaTelegramPlane,
     hover: "hover:text-[#229ed9]",
+  },
+  {
+    // Points at Digikart itself until there's a separate marketing site.
+    href: "/",
+    label: "Website",
+    Icon: FaGlobe,
+    hover: "hover:text-[#c4b5fd]",
   },
 ];
 
