@@ -149,7 +149,11 @@ export function CrudPanel({
   const handleSubmit = async (payload) => {
     if (bulkBusy) return; // don't race a bulk op's reload
     if (modal.mode === "create") {
-      await adminApi.create(resource, { ...parentDefaults, ...payload });
+      // parentDefaults LAST: it is context the panel already knows (which
+      // category these products belong to), so a stale or blank form value must
+      // never override it. Spreading it first meant an untouched field
+      // submitted "" and won, which the API rejected as an invalid pk.
+      await adminApi.create(resource, { ...payload, ...parentDefaults });
     } else {
       await adminApi.update(resource, modal.item.id, payload);
     }
@@ -280,6 +284,10 @@ export function CrudPanel({
                 className={`min-w-0 flex-1 text-left ${onOpen ? "group cursor-pointer" : "cursor-default"}`}
               >
                 <span className="flex items-center gap-2">
+                  {/* The id, shown because some forms still ask for one (a
+                      bundle member, a category's parent). Hiding it forces
+                      people to guess or dig through the API. */}
+                  <span className="shrink-0 font-mono text-xs text-ink-soft">#{item.id}</span>
                   <span
                     title={itemLabel(item)}
                     className={`truncate font-semibold text-ink ${onOpen ? "group-hover:text-brand-700 dark:group-hover:text-brand-300" : ""}`}
@@ -317,8 +325,15 @@ export function CrudPanel({
       >
         {modal && (
           <ResourceForm
-            fields={schema}
-            initial={modal.mode === "edit" ? modal.item : null}
+            fields={
+              // Hide anything the panel already determines. Asking someone to
+              // type the numeric id of the category they are literally browsing
+              // is a question the UI can answer itself.
+              modal.mode === "create"
+                ? schema.filter((f) => !(f.name in parentDefaults))
+                : schema
+            }
+            initial={modal.mode === "edit" ? modal.item : parentDefaults}
             onSubmit={handleSubmit}
             onCancel={() => setModal(null)}
             submitLabel={modal.mode === "edit" ? "Save changes" : "Create"}

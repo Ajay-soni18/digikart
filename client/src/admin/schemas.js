@@ -16,7 +16,7 @@ export const SCHEMAS = {
       name: "parent",
       label: "Parent category",
       type: "number",
-      hint: "Leave blank for a top-level category. Categories are navigation only — they never carry a price.",
+      hint: "The #id of the parent, shown beside each category in the list. Leave blank for a top-level category. Categories are navigation only — they never carry a price.",
     },
     { name: "description", label: "Description", type: "textarea" },
     { name: "image", label: "Cover image", type: "file" },
@@ -127,7 +127,13 @@ export const SCHEMAS = {
         { value: "bundle", label: "Another bundle (nested)" },
       ],
     },
-    { name: "item_id", label: "Its ID", type: "number", required: true },
+    {
+      name: "item_id",
+      label: "Its ID",
+      type: "number",
+      required: true,
+      hint: "The #id shown beside each product or bundle in the lists.",
+    },
     order,
   ],
 };
