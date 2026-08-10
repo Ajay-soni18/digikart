@@ -56,6 +56,37 @@ export const adminApi = {
 
   remove: (resource, id) => api.delete(`/admin/${resource}/${id}/`),
 
+  // Create a product and, optionally, attach its first file in one action.
+  //
+  // Three calls are unavoidable: storage keys are `products/{id}/{version}/…`,
+  // so the product must exist before its bytes can be stored. The admin sees one
+  // button; this hides the sequence — but NOT the failure. If the product is
+  // created and the upload then fails, we return the product along with the
+  // error, because silently swallowing it is how you end up with a paid product
+  // that has no file.
+  createProductWithAttachment: async (payload) => {
+    const { attachment, ...fields } = payload;
+    const product = await adminApi.create("products", fields);
+    if (!(attachment instanceof File)) return { product, uploadError: null };
+
+    const isPdf = /\.pdf$/i.test(attachment.name);
+    try {
+      const row = await adminApi.create("product-files", {
+        product: product.id,
+        title: attachment.name,
+        // Only a PDF can use the watermarked viewer. The upload endpoint
+        // re-derives the real type from the bytes and downgrades anything else,
+        // so this is a starting guess, not the final word.
+        delivery: isPdf ? "protected" : "download",
+        file_type: isPdf ? "pdf" : "other",
+      });
+      await adminApi.uploadFile(row.id, attachment);
+      return { product, uploadError: null };
+    } catch (e) {
+      return { product, uploadError: e };
+    }
+  },
+
   // Replace a product file's bytes. Multipart, and untimed: these are large.
   uploadFile: (fileId, file) => {
     const fd = new FormData();

@@ -60,6 +60,7 @@ export function CrudPanel({
   resource,
   params,
   parentDefaults = {},
+  onCreate, // override the create call (e.g. to attach a file in the same action)
   onOpen,
   itemLabel = (it) => it.name || it.title,
   itemSubLabel, // optional muted second line, e.g. a category's parent path
@@ -153,7 +154,19 @@ export function CrudPanel({
       // category these products belong to), so a stale or blank form value must
       // never override it. Spreading it first meant an untouched field
       // submitted "" and won, which the API rejected as an invalid pk.
-      await adminApi.create(resource, { ...payload, ...parentDefaults });
+      const body = { ...payload, ...parentDefaults };
+      if (onCreate) {
+        const result = await onCreate(body);
+        // A create that half-succeeded still has to be reported. The row exists,
+        // so the list must refresh, but the admin needs to know the file didn't.
+        if (result?.uploadError) {
+          setActionError(
+            apiError(result.uploadError, "The product was created, but its file didn't upload. Open it and try again.")
+          );
+        }
+      } else {
+        await adminApi.create(resource, body);
+      }
     } else {
       await adminApi.update(resource, modal.item.id, payload);
     }

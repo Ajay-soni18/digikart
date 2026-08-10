@@ -37,6 +37,12 @@ export const SCHEMAS = {
       hint: "Shown free to everyone as the hook. The attached files are what's paid for.",
     },
     {
+      name: "attachment",
+      label: "Attach a file (optional)",
+      type: "file",
+      hint: "The paid payload. A PDF opens in the watermarked viewer; anything else is a download. Add more files, or replace this one, from the Files panel afterwards.",
+    },
+    {
       name: "is_free",
       label: "Free for anyone signed in",
       type: "toggle",

@@ -99,14 +99,22 @@ export default function CatalogManager() {
             params={{ category: category.id }}
             parentDefaults={{ category: category.id }}
             onOpen={setProduct}
+            onCreate={(payload) => adminApi.createProductWithAttachment(payload)}
             itemLabel={(it) => it.title}
-            renderBadges={(it) => (it.is_free ? "Free" : `₹${it.price}`)}
+            renderBadges={(it) =>
+              `${it.is_free ? "Free" : `₹${it.price}`} · ${(it.files || []).length} file${
+                (it.files || []).length === 1 ? "" : "s"
+              }`
+            }
             addLabel="New product"
             selectable
             supportsComingSoon
           />
         ) : (
-          <Alert tone="info">Pick a category to manage its products.</Alert>
+          <Alert tone="info">
+            Pick a category on the left to manage its products. You can attach the
+            first file while creating a product — no need to come back here.
+          </Alert>
         )}
 
         {product ? (
@@ -137,7 +145,10 @@ export default function CatalogManager() {
             </div>
           </div>
         ) : (
-          <Alert tone="info">Pick a product to manage its files.</Alert>
+          <Alert tone="info">
+            Pick a product to add more files or replace one. A product's first file
+            can be attached on the product form itself.
+          </Alert>
         )}
       </div>
     </div>
