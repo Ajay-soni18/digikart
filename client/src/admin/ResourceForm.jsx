@@ -59,8 +59,21 @@ export function ResourceForm({ fields, initial, onSubmit, submitLabel = "Save", 
     try {
       const payload = { ...values };
       for (const f of fields) {
+        // A field hidden by showIf isn't part of what the admin is describing —
+        // sending it anyway means a "free product" still submits a price, and the
+        // API rejects the whole save over a field the form deliberately hid.
+        if (f.showIf && !f.showIf(values)) {
+          delete payload[f.name];
+          continue;
+        }
         // Drop empty file fields so we don't overwrite an existing file with nothing.
         if (f.type === "file" && !payload[f.name]) delete payload[f.name];
+        // An untouched number reads as "", which DRF answers with "A valid number
+        // is required." Omit it instead and let the model default apply — blank
+        // means "no opinion", not "zero".
+        if ((f.type === "number" || f.type === "price") && payload[f.name] === "") {
+          delete payload[f.name];
+        }
         // A datetime-local value is the admin's *local* wall-clock with no zone.
         // Send a timezone-explicit ISO instant so the server stores the correct
         // absolute time regardless of its own timezone (don't assume browser == server).
