@@ -841,7 +841,7 @@ export function PdfViewer({ fileId, productId, version }) {
       <div className="flex flex-col items-center justify-center gap-5 py-24">
         <div className="flex w-72 max-w-[80%] flex-col gap-2.5">
           <div className="flex items-center justify-center gap-1.5 text-ink-soft">
-            <span className="text-sm font-medium">Dear Doctor, please be patient...</span>
+            <span className="text-sm font-medium">Preparing your file…</span>
             <svg
               className="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-300"
               viewBox="0 0 24 24" fill="none" stroke="currentColor"
