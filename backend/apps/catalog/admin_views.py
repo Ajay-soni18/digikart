@@ -186,6 +186,16 @@ class AdminProductFileViewSet(BulkActionsMixin, viewsets.ModelViewSet):
     serializer_class = AdminProductFileSerializer
     queryset = ProductFile.objects.select_related("product").all()
 
+    def get_queryset(self):
+        """Honour ?product=. Without it the admin's Files panel listed every
+        file in the catalog whatever product was selected — so Delete removed
+        someone else's file while appearing to remove this one's."""
+        queryset = super().get_queryset()
+        product = self.request.query_params.get("product")
+        if product:
+            queryset = queryset.filter(product_id=product)
+        return queryset
+
     def get_parsers(self):
         """Only the `upload` action takes multipart; ordinary CRUD stays JSON,
         which the admin dashboard sends."""

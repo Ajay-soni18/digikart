@@ -132,10 +132,21 @@ export default function CatalogManager() {
               refreshToken={fileToken}
             />
             <div className="rounded-card border border-brand-100 bg-surface p-4">
-              <p className="text-xs text-muted">
-                Create the file row first, then upload its bytes here. Re-uploading
-                replaces the file and invalidates every reader's cached copy.
+              {/* Name the product. "Replace file" with no context is a question,
+                  not an instruction — especially next to a list that used to
+                  show every file in the catalog. */}
+              <p className="text-sm font-semibold text-ink">
+                Files for “{product.title}”
               </p>
+              <p className="mt-1 text-xs text-muted">
+                Re-uploading replaces the bytes and invalidates every reader's cached
+                copy. A product's first file can be attached on the product form.
+              </p>
+              {(product.files || []).length === 0 && (
+                <p className="mt-3 border-t border-brand-100 pt-3 text-xs text-muted">
+                  This product has no files yet. Add one above, then upload its bytes here.
+                </p>
+              )}
               {(product.files || []).map((file) => (
                 <div key={file.id} className="mt-3 border-t border-brand-100 pt-3">
                   <span className="text-sm font-semibold text-ink">{file.title}</span>

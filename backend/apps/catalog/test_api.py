@@ -632,3 +632,50 @@ class NavigationCacheTtlTests(TestCase):
         self.assertEqual(len(client.get("/api/v1/categories/").data), 1)
         category("Second")
         self.assertEqual(len(client.get("/api/v1/categories/").data), 2)
+
+
+class AdminListFilterTests(TestCase):
+    """Every admin list that a panel scopes by a parent must actually apply that
+    filter. When product-files ignored ?product=, the Files panel listed the
+    whole catalog whichever product was selected — so Delete removed another
+    product's file while appearing to remove this one's."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="admin@example.com", password="pw", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.cat_a = category("A")
+        self.cat_b = category("B")
+        self.p1 = product(self.cat_a, "P1", "10.00")
+        self.p2 = product(self.cat_b, "P2", "10.00")
+        product_file(self.p1, "p1-one.pdf")
+        product_file(self.p1, "p1-two.pdf")
+        product_file(self.p2, "p2-only.pdf")
+
+    def _rows(self, url):
+        data = self.client.get(url).data
+        return data["results"] if isinstance(data, dict) and "results" in data else data
+
+    def test_product_files_are_scoped_to_their_product(self):
+        rows = self._rows(f"/api/v1/admin/product-files/?product={self.p1.id}")
+        self.assertEqual({r["title"] for r in rows}, {"p1-one.pdf", "p1-two.pdf"})
+
+    def test_another_products_files_are_not_listed(self):
+        rows = self._rows(f"/api/v1/admin/product-files/?product={self.p2.id}")
+        self.assertEqual([r["title"] for r in rows], ["p2-only.pdf"])
+
+    def test_unfiltered_still_returns_everything(self):
+        self.assertEqual(len(self._rows("/api/v1/admin/product-files/")), 3)
+
+    def test_products_are_scoped_to_their_category(self):
+        rows = self._rows(f"/api/v1/admin/products/?category={self.cat_a.id}")
+        self.assertEqual([r["title"] for r in rows], ["P1"])
+
+    def test_bundle_items_are_scoped_to_their_bundle(self):
+        b1 = bundle("B1", self.p1)
+        bundle("B2", self.p2)
+        rows = self._rows(f"/api/v1/admin/bundle-items/?bundle={b1.id}")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["label"], "P1")
