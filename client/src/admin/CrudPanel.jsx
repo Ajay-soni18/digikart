@@ -277,7 +277,7 @@ export function CrudPanel({
           {items.map((item) => (
             <li
               key={item.id}
-              className={`flex min-w-0 items-center gap-2 py-3 ${selectable && selected.has(item.id) ? "-mx-2 rounded-xl bg-brand-50/60 px-2" : ""}`}
+              className={`flex min-w-0 items-start gap-2 py-3 ${selectable && selected.has(item.id) ? "-mx-2 rounded-xl bg-brand-50/60 px-2" : ""}`}
             >
               {selectable && (
                 <CheckBox
@@ -286,17 +286,18 @@ export function CrudPanel({
                   ariaLabel={`Select ${itemLabel(item)}`}
                 />
               )}
-              {/* min-w-0 is what stops a long name from shoving the buttons off
-                  the row: without it a flex child refuses to shrink below its
-                  content width, so the text wraps to five lines instead of
-                  truncating. */}
+              {/* Two lines, not one. Cramming title + badges + two labelled
+                  buttons + a chevron into a single row inside a ~500px panel
+                  left about 90px for the name, so everything read as
+                  "Operat…". The name now owns line one; the path and badges sit
+                  underneath, where wrapping is fine. */}
               <button
                 type="button"
                 disabled={!onOpen}
                 onClick={() => onOpen?.(item)}
                 className={`min-w-0 flex-1 text-left ${onOpen ? "group cursor-pointer" : "cursor-default"}`}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-baseline gap-2">
                   {/* The id, shown because some forms still ask for one (a
                       bundle member, a category's parent). Hiding it forces
                       people to guess or dig through the API. */}
@@ -307,20 +308,28 @@ export function CrudPanel({
                   >
                     {itemLabel(item)}
                   </span>
-                  {renderBadges?.(item, Badge)}
                 </span>
-                {itemSubLabel && (
-                  <span className="mt-0.5 block truncate text-xs text-ink-soft" title={itemSubLabel(item)}>
-                    {itemSubLabel(item)}
+                {(itemSubLabel || renderBadges) && (
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-soft">
+                    {itemSubLabel && (
+                      <span className="truncate" title={itemSubLabel(item)}>{itemSubLabel(item)}</span>
+                    )}
+                    {renderBadges?.(item, Badge)}
                   </span>
                 )}
               </button>
-              <Button className="shrink-0" variant="ghost" size="sm" icon={FiEdit2} disabled={!!bulkBusy} onClick={() => setModal({ mode: "edit", item })}>
-                <span className="hidden sm:inline">Edit</span>
-              </Button>
-              <Button className="shrink-0" variant="dangerGhost" size="sm" icon={FiTrash2} disabled={!!bulkBusy} onClick={() => handleDelete(item)}>
-                <span className="hidden sm:inline">Delete</span>
-              </Button>
+              {/* Icon-only. The labels cost ~120px of a panel that doesn't have
+                  it to spare, and a pencil and a bin need no caption. */}
+              <Button
+                className="shrink-0" variant="ghost" size="sm" icon={FiEdit2}
+                aria-label={`Edit ${itemLabel(item)}`} title="Edit"
+                disabled={!!bulkBusy} onClick={() => setModal({ mode: "edit", item })}
+              />
+              <Button
+                className="shrink-0" variant="dangerGhost" size="sm" icon={FiTrash2}
+                aria-label={`Delete ${itemLabel(item)}`} title="Delete"
+                disabled={!!bulkBusy} onClick={() => handleDelete(item)}
+              />
               {onOpen && (
                 <button onClick={() => onOpen(item)} aria-label="Open" className="shrink-0 px-1 text-navy-300 hover:text-brand-700 dark:hover:text-brand-300">
                   <FiChevronRight className="h-5 w-5" />
