@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.payments.models import Entitlement, Order, OrderItem
@@ -594,3 +594,41 @@ class SubtreeProductCountTests(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             self.client.get("/api/v1/categories/")
         self.assertLess(len(ctx), 20, f"{len(ctx)} queries to build the tree")
+
+
+class NavigationCacheTtlTests(TestCase):
+    """The version counter only travels between workers if the cache is shared.
+    Without Redis, Django falls back to a per-process cache and a bump made by
+    one worker never reaches the others — which is exactly how the first deploy
+    served an empty navigation tree while the database had categories.
+
+    So the TTL is chosen from the backend: seconds when the counter can't be
+    trusted to travel, a day when it can."""
+
+    def test_local_memory_cache_gets_a_short_ttl(self):
+        from apps.catalog import navigation
+
+        with override_settings(CACHES={"default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache"
+        }}):
+            self.assertFalse(navigation._cache_is_shared())
+            self.assertLessEqual(navigation._ttl(), 60)
+
+    def test_a_shared_cache_gets_the_long_ttl(self):
+        from apps.catalog import navigation
+
+        with override_settings(CACHES={"default": {
+            "BACKEND": "django_redis.cache.RedisCache", "LOCATION": "redis://x/0"
+        }}):
+            self.assertTrue(navigation._cache_is_shared())
+            self.assertGreater(navigation._ttl(), 60 * 60)
+
+    def test_same_process_writes_still_invalidate_instantly(self):
+        """The TTL is a backstop, not the mechanism — an edit handled by this
+        worker must show up immediately, not in 30 seconds."""
+        cache.clear()
+        client = APIClient()
+        category("First")
+        self.assertEqual(len(client.get("/api/v1/categories/").data), 1)
+        category("Second")
+        self.assertEqual(len(client.get("/api/v1/categories/").data), 2)
