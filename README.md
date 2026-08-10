@@ -24,6 +24,36 @@ text and footer links — no code changes needed.
 
 ---
 
+## Live demo
+
+**Storefront** → https://digikart-afk.pages.dev
+**API** → https://digikart-w3a9.onrender.com
+
+Sign in with any Google account. The backend is on a free tier that sleeps, so
+the **first request can take ~50 seconds** — after that it's quick.
+
+Payments run in **Razorpay test mode**, so you can complete a real checkout with
+a test card and watch the file unlock. Nothing is charged.
+
+```
+card  4111 1111 1111 1111    any future expiry, any CVV
+```
+
+**A five-minute tour of what's worth looking at:**
+
+| Try this | What it demonstrates |
+|---|---|
+| Browse **Computer Science** → *Core Subjects* → *Operating System* | Categories nest to any depth and are navigation only — they never carry a price or grant access |
+| Note the item counts on each card | Counts roll up the subtree, so a branch is never reported as empty because its products sit a level deeper |
+| Open **Creative Assets** | An unrelated domain in the same catalog. The model is not education-shaped — this branch is the proof |
+| Buy **Core CS — Everything** (₹399) | A bundle unlocks every product inside it, including ones added later |
+| Then open **The Lot** | A bundle containing other bundles. Membership is resolved through nesting, and a product reachable twice is charged once |
+| Put a product *and* a bundle containing it in the cart | The server drops the redundant line — you're never charged twice, whatever the client sends |
+| Open a purchased PDF | Bytes stream directly from Cloudflare R2 over HTTP Range via a 60-second signed URL. Django never touches them. The watermark is drawn client-side |
+| Open the same product signed out | Metadata is public, the file is not — and the payload contains no storage key to try |
+
+---
+
 ## Tech stack
 
 | Layer | Tech |

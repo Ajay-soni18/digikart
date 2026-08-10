@@ -18,12 +18,11 @@ def healthz(_request):
     return JsonResponse({"status": "ok"})
 
 
-# loader.io domain verification: it fetches /<token>.txt and expects the body
-# to be exactly the token. Override per-environment with the LOADERIO_TOKEN env
-# var; the default matches the file already served by the frontend (Netlify).
-LOADERIO_TOKEN = os.environ.get(
-    "LOADERIO_TOKEN", "loaderio-5be2f3504a8235f75a5782e613f6d63a"
-)
+# loader.io domain verification: it fetches /<token>.txt and expects the body to
+# be exactly the token. Off unless LOADERIO_TOKEN is set — the previous default
+# was a token from an old load test, so every deploy served a verification file
+# for an account that may not be ours.
+LOADERIO_TOKEN = os.environ.get("LOADERIO_TOKEN", "")
 
 
 def loaderio_verify(_request):
@@ -32,7 +31,8 @@ def loaderio_verify(_request):
 
 urlpatterns = [
     path("healthz", healthz, name="healthz"),
-    path(f"{LOADERIO_TOKEN}.txt", loaderio_verify, name="loaderio-verify"),
+    *([path(f"{LOADERIO_TOKEN}.txt", loaderio_verify, name="loaderio-verify")]
+      if LOADERIO_TOKEN else []),
     path("admin/", admin.site.urls),
     # Versioned API. Each app contributes its routes:
     path("api/v1/auth/", include("apps.accounts.urls")),
