@@ -79,7 +79,9 @@ bucket, API token, CORS, env vars, testing); the short version:
 ## Step 4 — Backend (Django + gunicorn)
 Create a **Web Service** from the repo, root = `backend/`.
 
-- **Build command:** `./build.sh`  (installs deps, `collectstatic`, `migrate`)
+- **Build command:** `./build.sh`  (installs deps, then `collectstatic`)
+  Migrations are NOT run here — they belong in the Procfile's `release` step, so
+  they run once against the live database instead of once per build.
 - **Start command:** `gunicorn config.wsgi:application --workers 3 --threads 4 --timeout 300 --bind 0.0.0.0:$PORT`
   *(or rely on the `Procfile`. `--timeout 300` gives admin note uploads room:
   the request receives the PDF, validates it, generates the compressed
